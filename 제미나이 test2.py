@@ -6,7 +6,7 @@ import math
 import time
 from datetime import datetime
 
-# --- 1. 페이지 설정 및 스타일 (모바일 최적화) ---
+# --- 1. 페이지 설정 및 스타일 ---
 st.set_page_config(
     page_title="조선거상 미니", 
     page_icon="🏯",
@@ -14,7 +14,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 모바일에서 더 나은 터치 경험을 위한 CSS
+# 모바일 최적화 CSS
 st.markdown("""
 <style>
     .stButton button { width: 100%; margin: 5px 0; padding: 15px; font-size: 18px; }
@@ -23,29 +23,23 @@ st.markdown("""
     .price-up { color: #ff4b4b; font-weight: bold; }
     .price-down { color: #4b7bff; font-weight: bold; }
     .price-same { color: #808080; }
-    .event-message { 
-        background-color: #f0f2f6; 
-        padding: 10px; 
-        border-radius: 10px; 
+    .trade-progress {
+        background-color: #f0f2f6;
+        padding: 15px;
+        border-radius: 10px;
         margin: 10px 0;
-        text-align: center;
+        font-family: monospace;
+        font-size: 14px;
+    }
+    .trade-line {
+        padding: 3px 0;
+        border-bottom: 1px solid #e0e0e0;
+    }
+    .trade-complete {
+        color: #00a65a;
         font-weight: bold;
-    }
-    /* 상단 정보를 더 눈에 띄게 */
-    div[data-testid="stMetricValue"] {
-        font-size: 24px !important;
-        font-weight: bold !important;
-    }
-    div[data-testid="stMetricLabel"] {
-        font-size: 14px !important;
-    }
-    /* 업데이트 애니메이션 */
-    @keyframes highlight {
-        0% { background-color: rgba(255,255,0,0.3); }
-        100% { background-color: transparent; }
-    }
-    .updated {
-        animation: highlight 1s ease;
+        font-size: 16px;
+        margin-top: 10px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -152,9 +146,7 @@ def load_game_data():
         return None, None, None, None, None, None
 
 # --- 4. 시간 시스템 함수 ---
-
 def update_game_time(player, settings, market_data, initial_stocks):
-    """시간 업데이트 및 이벤트 처리"""
     current_time = time.time()
     
     if 'last_time_update' not in st.session_state:
@@ -276,7 +268,7 @@ def calculate_max_purchase(player, items_info, market_data, pos, item_name, targ
     if item_name not in items_info:
         return 0
     
-    cw, tw = get_weight(player, items_info, merc_data)
+    cw, tw = get_weight(player, items_info, st.session_state.merc_data)
     item_weight = items_info[item_name]['w']
     
     max_by_money = player['money'] // target_price if target_price > 0 else 0
@@ -285,14 +277,16 @@ def calculate_max_purchase(player, items_info, market_data, pos, item_name, targ
     
     return min(max_by_money, max_by_weight, max_by_stock)
 
-def process_buy(player, items_info, market_data, pos, item_name, qty, merc_data):
+def process_buy(player, items_info, market_data, pos, item_name, qty, progress_placeholder):
     total_bought = 0
     total_spent = 0
+    trade_log = []
+    batch_prices = []
     
     while total_bought < qty:
         update_prices(st.session_state.settings, items_info, market_data)
         target = market_data[pos][item_name]
-        cw, tw = get_weight(player, items_info, merc_data)
+        cw, tw = get_weight(player, items_info, st.session_state.merc_data)
         
         can_pay = player['money'] // target['price'] if target['price'] > 0 else 0
         can_load = (tw - cw) // items_info[item_name]['w'] if items_info[item_name]['w'] > 0 else 999999
@@ -308,14 +302,26 @@ def process_buy(player, items_info, market_data, pos, item_name, qty, merc_data)
             player['inv'][item_name] = player['inv'].get(item_name, 0) + 1
             target['stock'] -= 1
             total_bought += 1
+            batch_prices.append(target['price'])
         
-        time.sleep(0.1)
+        # 진행상황 로그 추가
+        avg_price = sum(batch_prices) // len(batch_prices)
+        trade_log.append(f"➤ {total_bought}/{qty} 구매 중... (체결가: {target['price']}냥 | 평균가: {avg_price}냥)")
+        
+        # 실시간 진행상황 표시
+        with progress_placeholder.container():
+            for log in trade_log[-5:]:  # 최근 5개만 표시
+                st.markdown(f"<div class='trade-line'>{log}</div>", unsafe_allow_html=True)
+        
+        time.sleep(0.3)  # 0.3초 대기
     
-    return total_bought, total_spent
+    return total_bought, total_spent, trade_log
 
-def process_sell(player, items_info, market_data, pos, item_name, qty, merc_data):
+def process_sell(player, items_info, market_data, pos, item_name, qty, progress_placeholder):
     total_sold = 0
     total_earned = 0
+    trade_log = []
+    batch_prices = []
     
     while total_sold < qty:
         update_prices(st.session_state.settings, items_info, market_data)
@@ -328,10 +334,20 @@ def process_sell(player, items_info, market_data, pos, item_name, qty, merc_data
             market_data[pos][item_name]['stock'] += 1
             total_sold += 1
             total_earned += current_price
+            batch_prices.append(current_price)
         
-        time.sleep(0.1)
+        # 진행상황 로그 추가
+        avg_price = sum(batch_prices) // len(batch_prices)
+        trade_log.append(f"➤ {total_sold}/{qty} 판매 중... (체결가: {current_price}냥 | 평균가: {avg_price}냥)")
+        
+        # 실시간 진행상황 표시
+        with progress_placeholder.container():
+            for log in trade_log[-5:]:  # 최근 5개만 표시
+                st.markdown(f"<div class='trade-line'>{log}</div>", unsafe_allow_html=True)
+        
+        time.sleep(0.3)  # 0.3초 대기
     
-    return total_sold, total_earned
+    return total_sold, total_earned, trade_log
 
 def save_player_data(doc, player):
     try:
@@ -396,8 +412,8 @@ if doc:
         st.session_state.events = []
     if 'last_update' not in st.session_state:
         st.session_state.last_update = time.time()
-    if 'updated_components' not in st.session_state:
-        st.session_state.updated_components = set()
+    if 'trade_log' not in st.session_state:
+        st.session_state.trade_log = []
 
     # [화면 1] 슬롯 선택
     if not st.session_state.game_started:
@@ -451,7 +467,7 @@ if doc:
         market_data = st.session_state.market_data
         initial_stocks = st.session_state.initial_stocks
         
-        # 시간 업데이트 (10초마다)
+        # 시간 업데이트
         current_time = time.time()
         if current_time - st.session_state.last_update > 10:
             player, events = update_game_time(player, settings, market_data, initial_stocks)
@@ -469,25 +485,19 @@ if doc:
                 st.markdown(f"<div class='event-message'>{message}</div>", unsafe_allow_html=True)
             st.session_state.events = []
         
-        # 상단 정보 - 항상 최신 상태로 표시
+        # 상단 정보
         st.title(f"🏯 {player['pos']}")
         
-        # 최신 데이터로 메트릭 표시
         col1, col2, col3, col4 = st.columns(4)
-        
-        # 소지금 메트릭
         money_placeholder = col1.empty()
         money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
         
-        # 무게 메트릭
         weight_placeholder = col2.empty()
         weight_placeholder.metric("⚖️ 무게", f"{cw}/{tw}근")
         
-        # 시간 메트릭
         time_placeholder = col3.empty()
         time_placeholder.metric("📅 시간", get_time_display(player))
         
-        # 거래 횟수 메트릭
         trade_placeholder = col4.empty()
         trade_placeholder.metric("📊 거래", f"{st.session_state.stats['trade_count']}회")
         
@@ -512,7 +522,6 @@ if doc:
                                     if player['money'] >= data['price']:
                                         player['money'] -= data['price']
                                         player['mercs'].append(name)
-                                        # 상단 정보 즉시 업데이트
                                         cw, tw = get_weight(player, items_info, merc_data)
                                         weight_placeholder.metric("⚖️ 무게", f"{cw}/{tw}근")
                                         money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
@@ -560,6 +569,9 @@ if doc:
                                 col_a, col_b, col_c = st.columns([2,1,1])
                                 qty = col_a.text_input("수량", value="1", key=f"qty_{item_name}", label_visibility="collapsed")
                                 
+                                # 진행상황 표시 영역
+                                progress_placeholder = st.empty()
+                                
                                 # 매수 버튼
                                 if col_b.button("💰 매수", key=f"buy_{item_name}", use_container_width=True):
                                     try:
@@ -567,16 +579,21 @@ if doc:
                                         if qty_int > 0:
                                             actual_qty = min(qty_int, max_buy)
                                             if actual_qty > 0:
-                                                bought, spent = process_buy(
+                                                # 진행상황 초기화
+                                                progress_placeholder.markdown("<div class='trade-progress'></div>", unsafe_allow_html=True)
+                                                
+                                                # 분할 매수 실행
+                                                bought, spent, trade_log = process_buy(
                                                     player, items_info, market_data,
-                                                    player['pos'], item_name, actual_qty, merc_data
+                                                    player['pos'], item_name, actual_qty, progress_placeholder
                                                 )
+                                                
                                                 # 통계 업데이트
                                                 st.session_state.stats['total_bought'] += bought
                                                 st.session_state.stats['total_spent'] += spent
                                                 st.session_state.stats['trade_count'] += 1
                                                 
-                                                # 상단 정보 즉시 업데이트
+                                                # 상단 정보 업데이트
                                                 money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
                                                 cw, tw = get_weight(player, items_info, merc_data)
                                                 weight_placeholder.metric("⚖️ 무게", f"{cw}/{tw}근")
@@ -585,7 +602,9 @@ if doc:
                                                 # 가격 정보 업데이트
                                                 price_placeholder.markdown(f"<span class='{price_class}'>{d['price']:,}냥</span>", unsafe_allow_html=True)
                                                 
-                                                st.success(f"✅ {bought}개 매수 완료! ({spent:,}냥)")
+                                                # 최종 완료 메시지
+                                                avg_price = spent // bought
+                                                st.markdown(f"<div class='trade-complete'>✅ 총 {bought}개 매수 완료! (총 {spent:,}냥 | 평균가: {avg_price}냥)</div>", unsafe_allow_html=True)
                                             else:
                                                 st.error("❌ 구매 가능한 수량이 없습니다")
                                         else:
@@ -601,16 +620,21 @@ if doc:
                                             max_sell = player['inv'].get(item_name, 0)
                                             actual_qty = min(qty_int, max_sell)
                                             if actual_qty > 0:
-                                                sold, earned = process_sell(
+                                                # 진행상황 초기화
+                                                progress_placeholder.markdown("<div class='trade-progress'></div>", unsafe_allow_html=True)
+                                                
+                                                # 분할 매도 실행
+                                                sold, earned, trade_log = process_sell(
                                                     player, items_info, market_data,
-                                                    player['pos'], item_name, actual_qty, merc_data
+                                                    player['pos'], item_name, actual_qty, progress_placeholder
                                                 )
+                                                
                                                 # 통계 업데이트
                                                 st.session_state.stats['total_sold'] += sold
                                                 st.session_state.stats['total_earned'] += earned
                                                 st.session_state.stats['trade_count'] += 1
                                                 
-                                                # 상단 정보 즉시 업데이트
+                                                # 상단 정보 업데이트
                                                 money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
                                                 cw, tw = get_weight(player, items_info, merc_data)
                                                 weight_placeholder.metric("⚖️ 무게", f"{cw}/{tw}근")
@@ -619,7 +643,9 @@ if doc:
                                                 # 가격 정보 업데이트
                                                 price_placeholder.markdown(f"<span class='{price_class}'>{d['price']:,}냥</span>", unsafe_allow_html=True)
                                                 
-                                                st.success(f"✅ {sold}개 매도 완료! ({earned:,}냥)")
+                                                # 최종 완료 메시지
+                                                avg_price = earned // sold
+                                                st.markdown(f"<div class='trade-complete'>✅ 총 {sold}개 매도 완료! (총 {earned:,}냥 | 평균가: {avg_price}냥)</div>", unsafe_allow_html=True)
                                             else:
                                                 st.error("❌ 판매 가능한 수량이 없습니다")
                                         else:
@@ -702,7 +728,6 @@ if doc:
                         if player['money'] >= cost:
                             player['money'] -= cost
                             player['pos'] = dest
-                            # 상단 정보 즉시 업데이트
                             money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
                             st.success(f"✅ {dest}로 이동했습니다!")
                             st.rerun()
@@ -722,26 +747,10 @@ if doc:
             
             st.divider()
             
-            # 수동 저장
+            # 저장
             if st.button("💾 저장", use_container_width=True):
                 if save_player_data(doc, player):
                     st.success("✅ 저장 완료!")
-            
-            # 자동 저장 설정
-            if 'auto_save' not in st.session_state:
-                st.session_state.auto_save = True
-            
-            auto_save = st.toggle("자동 저장", value=st.session_state.auto_save)
-            st.session_state.auto_save = auto_save
-            
-            # 자동 저장 실행 (10초마다)
-            if auto_save and 'last_auto_save' in st.session_state:
-                if time.time() - st.session_state.last_auto_save > 30:
-                    if save_player_data(doc, player):
-                        st.toast("💾 자동 저장 완료!")
-                        st.session_state.last_auto_save = time.time()
-            elif auto_save:
-                st.session_state.last_auto_save = time.time()
             
             # 종료
             if st.button("🚪 메인으로", use_container_width=True):
