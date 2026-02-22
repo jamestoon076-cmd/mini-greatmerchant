@@ -192,7 +192,7 @@ def update_game_time(player, settings, market_data, initial_stocks):
 - **소지금 마이너스 방지**: 구매 루프에서 실시간 돈 차감 체크
 - **용병 판매 추가**: 고용소에서 원가 80% 회수, 여러 마리 판매 가능
 - **중복 출력 방지**: 루프에서 show_town_market() 한 번만 호출
-- **가격 변동**: update_prices() 함수로 재고 변화 후 가격 재계산 (재고 ↑ → 가격 ↓)
+- **가격 변동**: update_prices() 함수로 재고 변화 후 가격 재계산 (재고 증가 -> 가격 하락)
 - **이동비 구현**: 거리별 비용 차감
 
 코드 전체를 복사해서 `딥시크 test1.py` 파일에 붙여넣고,  
@@ -509,3 +509,4 @@ if st.button("저장하고 종료"):
     save_player_data(doc, player)
     st.session_state.game_started = False
     st.rerun()
+
