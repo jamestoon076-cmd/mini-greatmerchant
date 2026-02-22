@@ -74,10 +74,28 @@ def load_all_data():
         play_ws = doc.worksheet("Player_Data")
         slots = play_ws.get_all_records()
         
-        # 웹 화면에 슬롯 정보 출력
-        st.write("### 💾 세이브 슬롯 선택")
-        for s in slots:
-            st.write(f"[{s['slot']}] 위치: {s['pos']} | 잔액: {int(s.get('money', 0)):,}냥")
+       # --- 기존 코드 수정 구간 ---
+st.write("### 💾 세이브 슬롯 선택")
+for s in slots:
+    st.write(f"[{s['slot']}] 위치: {s['pos']} | 잔액: {int(s.get('money', 0)):,}냥")
+
+# 1. 숫자를 입력받고
+choice = st.number_input("슬롯 번호를 선택하세요", min_value=1, max_value=len(slots), step=1)
+
+# 2. 엔터 대신 누를 수 있는 '확인 버튼' 추가
+if st.button("🎮 게임 시작하기"):
+    p_row = next(s for s in slots if s['slot'] == choice)
+    
+    # 세션 상태(session_state)에 플레이어 정보를 저장해야 페이지가 새로고침되어도 유지됩니다.
+    st.session_state.player = {
+        'slot': choice, 'money': int(p_row.get('money', 0)), 'pos': str(p_row.get('pos', '한양')),
+        'inv': json.loads(p_row.get('inventory', '{}')) if p_row.get('inventory') else {},
+        'mercs': json.loads(p_row.get('mercs', '[]')) if p_row.get('mercs') else [],
+        'year': int(p_row.get('year', 1)), 'month': int(p_row.get('month', 1)), 'week': int(p_row.get('week', 1)),
+        'last_tick': time.time(),
+        'stats': {'total_bought': 0, 'total_sold': 0, 'total_spent': 0, 'total_earned': 0, 'trade_count': 0}
+    }
+    st.success(f"{choice}번 슬롯으로 시작합니다!")
         
         # 사용자 입력 (웹용으로 간단히 구현)
         choice = st.number_input("슬롯 번호를 입력하고 Enter를 누르세요", min_value=1, max_value=len(slots), step=1)
@@ -102,3 +120,4 @@ market_data = {v: {i: {'stock': q, 'price': 0, 'old_price': 0} for i, q in data[
 
 # --- 이후 원본 로직(update_prices, buy, sell 등)이 동일하게 이어집니다 ---
 # [사용자님의 원본 main.py 로직을 아래에 그대로 붙여넣으시면 됩니다.]
+
