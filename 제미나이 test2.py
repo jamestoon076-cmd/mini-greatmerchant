@@ -4,7 +4,7 @@ import json
 import gspread
 from google.oauth2.service_account import Credentials
 
-# 1. 시트 연결 로직 (수정 금지, Secrets 사용)
+# 1. 시트 연결 (Secrets 사용)
 def connect_gsheet():
     try:
         scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
@@ -15,47 +15,47 @@ def connect_gsheet():
         st.error(f"연결 실패: {e}")
         return None
 
-# --- 데이터 로드 로직 (사용자님 원본 그대로 유지) ---
+# 데이터 로드
 doc = connect_gsheet()
-# [원본의 load_all_data() 함수가 여기에 위치합니다]
 
-# --- UI 및 입력 방식 개선 (핵심 수정 구간) ---
-st.title("🏯 조선거상 미니")
+# --- [안전장치] 데이터 로드 완료 확인 ---
+if doc:
+    # 사용자님의 원본 데이터 로드 함수 호출 (예: load_all_data)
+    # 아래는 예시이며, 실제 원본 로직을 이 블록 안에 두시면 됩니다.
+    st.title("🏯 조선거상 미니")
 
-# 사용자님이 고생해서 만든 데이터 로딩 실행
-# (여기에 원본 변수 초기화 로직: SETTINGS, ITEMS_INFO 등...)
+    # 2. 세이브 슬롯 선택 (모바일 키보드 문제 해결)
+    st.subheader("💾 세이브 슬롯 선택")
+    # text_input을 쓰면 모바일에서 숫자를 직접 칠 수 있는 키보드가 뜹니다.
+    slot_input = st.text_input("슬롯 번호를 입력하세요 (예: 1, 2, 3)", key="slot_select")
+    
+    # 엔터 대신 이 버튼을 누르면 게임이 시작됩니다.
+    if st.button("🎮 게임 시작/불러오기", use_container_width=True):
+        if slot_input:
+            st.session_state['connected'] = True
+            st.success(f"{slot_input}번 슬롯 접속 중...")
+            # 여기서 실제 원본 로직의 플레이어 데이터를 세팅하세요.
 
-# 1. 세이브 슬롯 선택 (모바일 엔터키 문제 해결)
-st.subheader("💾 세이브 슬롯 선택")
-slot_num = st.text_input("슬롯 번호를 입력하세요 (예: 1)", value="1")
+    # 3. 물품 거래 섹션 (1000개 대량 구매용)
+    st.divider()
+    st.subheader("🛒 물품 거래")
+    
+    # 아이템 선택
+    # ITEMS_INFO가 로드되었다면 list(ITEMS_INFO.keys())를 넣으세요.
+    item_choice = st.selectbox("거래할 아이템 선택", ["쌀", "고기", "약초"]) # 예시
+    
+    # [핵심] 1000개씩 한 번에 입력하는 칸
+    trade_qty = st.text_input("거래 수량 입력 (직접 타이핑)", value="1", key="qty_input")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("💰 매수하기", use_container_width=True):
+            st.info(f"{item_choice} {trade_qty}개 매수 시도!")
+            # 원본의 buy(item_choice, int(trade_qty)) 호출
+    with col2:
+        if st.button("📦 매도하기", use_container_width=True):
+            st.info(f"{item_choice} {trade_qty}개 매도 시도!")
+            # 원본의 sell(item_choice, int(trade_qty)) 호출
 
-if st.button("🎮 게임 시작/불러오기", use_container_width=True):
-    # 여기서 원본의 플레이어 데이터 로드 로직 실행
-    st.success(f"{slot_num}번 슬롯 접속 완료!")
-
-st.divider()
-
-# 2. 물품 거래 (1000개 대량 타이핑 가능하게)
-st.subheader("🛒 물품 거래")
-item_to_trade = st.selectbox("거래할 아이템", list(ITEMS_INFO.keys()))
-
-# [중요] text_input을 써야 모바일에서 키보드가 바로 뜨고 1000개 입력이 쉽습니다.
-trade_qty_str = st.text_input("거래 수량 입력 (직접 타이핑)", value="1")
-
-col1, col2 = st.columns(2)
-with col1:
-    if st.button("💰 매수하기", use_container_width=True):
-        try:
-            qty = int(trade_qty_str)
-            # 원본의 buy(item_to_trade, qty) 호출
-            st.info(f"{item_to_trade} {qty}개 매수 완료!")
-        except:
-            st.error("숫자만 입력해 주세요.")
-with col2:
-    if st.button("📦 매도하기", use_container_width=True):
-        try:
-            qty = int(trade_qty_str)
-            # 원본의 sell(item_to_trade, qty) 호출
-            st.info(f"{item_to_trade} {qty}개 매도 완료!")
-        except:
-            st.error("숫자만 입력해 주세요.")
+else:
+    st.error("구글 시트에 연결할 수 없습니다. Secrets 설정을 확인하세요.")
