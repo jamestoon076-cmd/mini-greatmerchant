@@ -28,9 +28,14 @@ def safe_int_input(prompt, min_val=None, max_val=None):
 def connect_gsheet():
     try:
         scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        json_path = 'c:/Users/오리/Desktop/거상게임/credentials.json'
-        creds = Credentials.from_service_account_file(json_path, scopes=scopes)
+        # 컴퓨터 주소(c:/Users/...) 대신 스트림릿의 'Secrets' 기능을 사용하도록 변경합니다.
+        import streamlit as st
+        creds_info = st.secrets["gspread"]
+        creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
         return gspread.authorize(creds).open("조선거상_DB")
+    except Exception as e:
+        print(f"❌ 연결 실패: {e}")
+        return None
     except Exception as e:
         print(f"❌ 연결 실패: {e}"); sys.exit()
 
@@ -235,4 +240,5 @@ if __name__ == "__main__":
         elif cmd == '4':
             print(f"\n📦 인벤토리: {player['inv']}\n⚔️ 용병: {player['mercs']}")
         elif cmd == '5': save_game()
+
         elif cmd == '0': save_game(); break
