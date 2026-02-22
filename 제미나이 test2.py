@@ -71,8 +71,28 @@ def load_all_data():
                         villages[v_name]['items'][headers[i]] = stock
                         initial_stocks[v_name][headers[i]] = stock
         
+        # --- 78번 라인 근처 수정 ---
         play_ws = doc.worksheet("Player_Data")
         slots = play_ws.get_all_records()
+        
+        # 웹 화면에 슬롯 정보 출력
+        st.write("### 💾 세이브 슬롯 선택")
+        for s in slots:
+            st.write(f"[{s['slot']}] 위치: {s['pos']} | 잔액: {int(s.get('money', 0)):,}냥")
+        
+        # [모바일용] 숫자 입력과 시작 버튼
+        choice = st.number_input("슬롯 번호를 선택하세요", min_value=1, max_value=len(slots), step=1)
+        
+        if st.button("🎮 게임 시작하기"):
+            # 버튼 눌렀을 때의 로직
+            p_row = next(s for s in slots if s['slot'] == choice)
+            # ... 나머지 플레이어 데이터 생성 로직 ...
+            return player
+
+    # ⚠️ 이 부분이 빠져서 에러가 났던 겁니다! ⚠️
+    except Exception as e:
+        st.error(f"❌ 데이터 로드 중 오류 발생: {e}")
+        return None
         
        # --- 기존 코드 수정 구간 ---
 st.write("### 💾 세이브 슬롯 선택")
@@ -120,4 +140,5 @@ market_data = {v: {i: {'stock': q, 'price': 0, 'old_price': 0} for i, q in data[
 
 # --- 이후 원본 로직(update_prices, buy, sell 등)이 동일하게 이어집니다 ---
 # [사용자님의 원본 main.py 로직을 아래에 그대로 붙여넣으시면 됩니다.]
+
 
