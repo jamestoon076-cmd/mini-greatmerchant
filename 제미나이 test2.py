@@ -9,7 +9,6 @@ from datetime import datetime
 
 # --- 1. 유틸리티 함수 ---
 def safe_int_input(prompt, min_val=None, max_val=None):
-    """사용자로부터 안전하게 정수 입력을 받는 함수 (웹용 st.text_input 활용 권장하나 로직 유지를 위해 남김)"""
     while True:
         try:
             line = input(prompt).strip()
@@ -25,11 +24,10 @@ def safe_int_input(prompt, min_val=None, max_val=None):
         except ValueError:
             print("❌ 숫자만 입력하세요.")
 
-# --- 2. 시트 연결 (가장 중요한 수정 부분!) ---
+# --- 2. 시트 연결 ---
 def connect_gsheet():
     try:
         scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        # [수정] 내 컴퓨터 주소(C:/Users/...)를 지우고 스트림릿 Secrets를 사용합니다.
         creds_info = st.secrets["gspread"]
         creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
         return gspread.authorize(creds).open("조선거상_DB")
@@ -37,12 +35,12 @@ def connect_gsheet():
         st.error(f"❌ 연결 실패: {e}. 스트림릿 Secrets 설정을 확인하세요!")
         sys.exit()
 
-# 프로그램 실행 시 시트 연결
 doc = connect_gsheet()
 
-# --- 3. 데이터 로드 및 초기화 (원본 로직 100% 유지) ---
+# --- 3. 데이터 로드 함수 ---
 def load_all_data():
     try:
+        # 설정 및 아이템 데이터 로드
         set_ws = doc.worksheet("Setting_Data")
         settings = {r['변수명']: float(r['값']) for r in set_ws.get_all_records()}
         
@@ -71,58 +69,32 @@ def load_all_data():
                         villages[v_name]['items'][headers[i]] = stock
                         initial_stocks[v_name][headers[i]] = stock
         
-        # --- 78번 라인 근처 수정 ---
+        # 슬롯 데이터 로드
         play_ws = doc.worksheet("Player_Data")
         slots = play_ws.get_all_records()
         
-        # 웹 화면에 슬롯 정보 출력
-        st.write("### 💾 세이브 슬롯 선택")
-        for s in slots:
-            st.write(f"[{s['slot']}] 위치: {s['pos']} | 잔액: {int(s.get('money', 0)):,}냥")
-        
-        # [모바일용] 숫자 입력과 시작 버튼
-        choice = st.number_input("슬롯 번호를 선택하세요", min_value=1, max_value=len(slots), step=1)
-        
-        if st.button("🎮 게임 시작하기"):
-            # 버튼 눌렀을 때의 로직
-            p_row = next(s for s in slots if s['slot'] == choice)
-            # ... 나머지 플레이어 데이터 생성 로직 ...
-            return player
-
-    # ⚠️ 이 부분이 빠져서 에러가 났던 겁니다! ⚠️
+        return settings, items_info, merc_data, villages, initial_stocks, slots
     except Exception as e:
-        st.error(f"❌ 데이터 로드 중 오류 발생: {e}")
-        return None
-        
-       # --- 기존 코드 수정 구간 ---
-st.write("### 💾 세이브 슬롯 선택")
-for s in slots:
-    st.write(f"[{s['slot']}] 위치: {s['pos']} | 잔액: {int(s.get('money', 0)):,}냥")
+        st.error(f"❌ 데이터 로드 오류: {e}")
+        sys.exit()
 
-# 1. 숫자를 입력받고
-choice = st.number_input("슬롯 번호를 선택하세요", min_value=1, max_value=len(slots), step=1)
+# --- 4. 실행 로직 ---
+# 데이터를 먼저 불러옵니다.
+SETTINGS, ITEMS_INFO, MERC_DATA, VILLAGES, INITIAL_STOCKS, SLOTS = load_all_data()
 
-# 2. 엔터 대신 누를 수 있는 '확인 버튼' 추가
-if st.button("🎮 게임 시작하기"):
-    p_row = next(s for s in slots if s['slot'] == choice)
+st.title("🏯 조선거상 미니 게임")
+
+# 세이브 슬롯 선택 화면
+if 'player' not in st.session_state:
+    st.write("### 💾 세이브 슬롯 선택")
+    for s in SLOTS:
+        st.write(f"[{s['slot']}] 위치: {s['pos']} | 잔액: {int(s.get('money', 0)):,}냥")
     
-    # 세션 상태(session_state)에 플레이어 정보를 저장해야 페이지가 새로고침되어도 유지됩니다.
-    st.session_state.player = {
-        'slot': choice, 'money': int(p_row.get('money', 0)), 'pos': str(p_row.get('pos', '한양')),
-        'inv': json.loads(p_row.get('inventory', '{}')) if p_row.get('inventory') else {},
-        'mercs': json.loads(p_row.get('mercs', '[]')) if p_row.get('mercs') else [],
-        'year': int(p_row.get('year', 1)), 'month': int(p_row.get('month', 1)), 'week': int(p_row.get('week', 1)),
-        'last_tick': time.time(),
-        'stats': {'total_bought': 0, 'total_sold': 0, 'total_spent': 0, 'total_earned': 0, 'trade_count': 0}
-    }
-    st.success(f"{choice}번 슬롯으로 시작합니다!")
-        
-        # 사용자 입력 (웹용으로 간단히 구현)
-        choice = st.number_input("슬롯 번호를 입력하고 Enter를 누르세요", min_value=1, max_value=len(slots), step=1)
-        
-        p_row = next(s for s in slots if s['slot'] == choice)
-        
-        player = {
+    choice = st.number_input("슬롯 번호를 선택하세요", min_value=1, max_value=len(SLOTS), step=1)
+    
+    if st.button("🎮 게임 시작하기"):
+        p_row = next(s for s in SLOTS if s['slot'] == choice)
+        st.session_state.player = {
             'slot': choice, 'money': int(p_row.get('money', 0)), 'pos': str(p_row.get('pos', '한양')),
             'inv': json.loads(p_row.get('inventory', '{}')) if p_row.get('inventory') else {},
             'mercs': json.loads(p_row.get('mercs', '[]')) if p_row.get('mercs') else [],
@@ -130,15 +102,9 @@ if st.button("🎮 게임 시작하기"):
             'last_tick': time.time(),
             'stats': {'total_bought': 0, 'total_sold': 0, 'total_spent': 0, 'total_earned': 0, 'trade_count': 0}
         }
-        return settings, items_info, merc_data, villages, initial_stocks, player
-    except Exception as e:
-        st.error(f"❌ 데이터 로드 오류: {e}"); sys.exit()
-
-# 글로벌 변수 초기화
-SETTINGS, ITEMS_INFO, MERC_DATA, VILLAGES, INITIAL_STOCKS, player = load_all_data()
-market_data = {v: {i: {'stock': q, 'price': 0, 'old_price': 0} for i, q in data['items'].items()} for v, data in VILLAGES.items()}
-
-# --- 이후 원본 로직(update_prices, buy, sell 등)이 동일하게 이어집니다 ---
-# [사용자님의 원본 main.py 로직을 아래에 그대로 붙여넣으시면 됩니다.]
-
-
+        st.rerun() # 화면 새로고침해서 게임 본문으로 진입
+else:
+    # 플레이어가 선택된 이후 게임 로직 시작
+    player = st.session_state.player
+    st.write(f"📍 현재 위치: **{player['pos']}** | 💰 잔액: **{player['money']:,}냥**")
+    # 여기에 나머지 게임 함수들(buy, sell 등)을 붙여넣으세요.
