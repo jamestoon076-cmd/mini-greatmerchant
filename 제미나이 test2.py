@@ -31,14 +31,26 @@ st.markdown("""
         text-align: center;
         font-weight: bold;
     }
-    .season-spring { color: #4CAF50; }
-    .season-summer { color: #FF9800; }
-    .season-autumn { color: #9C27B0; }
-    .season-winter { color: #2196F3; }
+    /* 상단 정보를 더 눈에 띄게 */
+    div[data-testid="stMetricValue"] {
+        font-size: 24px !important;
+        font-weight: bold !important;
+    }
+    div[data-testid="stMetricLabel"] {
+        font-size: 14px !important;
+    }
+    /* 업데이트 애니메이션 */
+    @keyframes highlight {
+        0% { background-color: rgba(255,255,0,0.3); }
+        100% { background-color: transparent; }
+    }
+    .updated {
+        animation: highlight 1s ease;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. 구글 시트 연결 함수 (Secrets 활용) ---
+# --- 2. 구글 시트 연결 함수 ---
 @st.cache_resource
 def connect_gsheet():
     try:
@@ -145,13 +157,12 @@ def update_game_time(player, settings, market_data, initial_stocks):
     """시간 업데이트 및 이벤트 처리"""
     current_time = time.time()
     
-    # 마지막 업데이트 시간 확인
     if 'last_time_update' not in st.session_state:
         st.session_state.last_time_update = current_time
         return player, []
     
     elapsed = current_time - st.session_state.last_time_update
-    months_passed = int(elapsed / 180)  # 180초 = 3분 = 1달
+    months_passed = int(elapsed / 180)
     
     events = []
     
@@ -170,10 +181,8 @@ def update_game_time(player, settings, market_data, initial_stocks):
         
         st.session_state.last_time_update = current_time
         
-        # 월 변경 이벤트
         if old_month != player['month'] or old_year != player['year']:
             events.append(("month", f"🌙 {player['year']}년 {player['month']}월이 시작되었습니다!"))
-            # 재고 초기화
             reset_count = 0
             for v_name in market_data:
                 if v_name in initial_stocks:
@@ -187,10 +196,8 @@ def update_game_time(player, settings, market_data, initial_stocks):
             if reset_count > 0:
                 events.append(("reset", f"🔄 {reset_count}개 품목 재고 초기화"))
         
-        # 주차 변경 이벤트
         events.append(("week", f"🌟 {player['year']}년 {player['month']}월 {player['week']}주차"))
         
-        # 주차별 효과
         if player['week'] == 1:
             events.append(("week_effect", "📅 새 달의 시작! 재고가 보충됩니다."))
             for v_name in market_data:
@@ -201,38 +208,31 @@ def update_game_time(player, settings, market_data, initial_stocks):
                             current_stock = market_data[v_name][item_name]['stock']
                             if current_stock < base_stock:
                                 market_data[v_name][item_name]['stock'] = int(base_stock * 1.1)
-        
         elif player['week'] == 2:
             events.append(("week_effect", "📈 변동성 증가 주간!"))
             settings['volatility'] = settings.get('volatility', 500) * 1.2
-        
         elif player['week'] == 3:
             events.append(("week_effect", "⚠️ 품귀 현상 주의!"))
-        
         elif player['week'] == 4:
             events.append(("week_effect", "📅 다음달 재고 초기화 준비!"))
         
-        # 계절별 효과
-        if player['month'] in [3, 4, 5]:  # 봄
+        if player['month'] in [3, 4, 5]:
             events.append(("season", "🌸 봄: 인삼/가죽 수요 증가!"))
             for v_name in market_data:
                 for item_name in market_data[v_name]:
                     if item_name in ['인삼', '소가죽', '염색가죽']:
                         market_data[v_name][item_name]['price'] = int(market_data[v_name][item_name]['price'] * 1.2)
-        
-        elif player['month'] in [6, 7, 8]:  # 여름
+        elif player['month'] in [6, 7, 8]:
             events.append(("season", "☀️ 여름: 비단 수요 증가!"))
             for v_name in market_data:
                 if '비단' in market_data[v_name]:
                     market_data[v_name]['비단']['price'] = int(market_data[v_name]['비단']['price'] * 1.3)
-        
-        elif player['month'] in [9, 10, 11]:  # 가을
+        elif player['month'] in [9, 10, 11]:
             events.append(("season", "🍂 가을: 쌀 수요 증가!"))
             for v_name in market_data:
                 if '쌀' in market_data[v_name]:
                     market_data[v_name]['쌀']['price'] = int(market_data[v_name]['쌀']['price'] * 1.3)
-        
-        else:  # 겨울 (12, 1, 2)
+        else:
             events.append(("season", "❄️ 겨울: 가죽갑옷 수요 급증!"))
             for v_name in market_data:
                 if '가죽갑옷' in market_data[v_name]:
@@ -285,12 +285,12 @@ def calculate_max_purchase(player, items_info, market_data, pos, item_name, targ
     
     return min(max_by_money, max_by_weight, max_by_stock)
 
-def process_buy(player, items_info, market_data, pos, item_name, qty):
+def process_buy(player, items_info, market_data, pos, item_name, qty, merc_data):
     total_bought = 0
     total_spent = 0
     
     while total_bought < qty:
-        update_prices(settings, items_info, market_data)
+        update_prices(st.session_state.settings, items_info, market_data)
         target = market_data[pos][item_name]
         cw, tw = get_weight(player, items_info, merc_data)
         
@@ -313,12 +313,12 @@ def process_buy(player, items_info, market_data, pos, item_name, qty):
     
     return total_bought, total_spent
 
-def process_sell(player, items_info, market_data, pos, item_name, qty):
+def process_sell(player, items_info, market_data, pos, item_name, qty, merc_data):
     total_sold = 0
     total_earned = 0
     
     while total_sold < qty:
-        update_prices(settings, items_info, market_data)
+        update_prices(st.session_state.settings, items_info, market_data)
         current_price = market_data[pos][item_name]['price']
         batch = min(100, qty - total_sold)
         
@@ -380,6 +380,8 @@ if doc:
         st.session_state.items_info = None
     if 'villages' not in st.session_state:
         st.session_state.villages = None
+    if 'merc_data' not in st.session_state:
+        st.session_state.merc_data = None
     if 'stats' not in st.session_state:
         st.session_state.stats = {
             'total_bought': 0,
@@ -392,6 +394,10 @@ if doc:
         st.session_state.last_time_update = time.time()
     if 'events' not in st.session_state:
         st.session_state.events = []
+    if 'last_update' not in st.session_state:
+        st.session_state.last_update = time.time()
+    if 'updated_components' not in st.session_state:
+        st.session_state.updated_components = set()
 
     # [화면 1] 슬롯 선택
     if not st.session_state.game_started:
@@ -419,7 +425,6 @@ if doc:
                     st.session_state.initial_stocks = initial_stocks
                     st.session_state.last_time_update = time.time()
                     
-                    # 시장 데이터 초기화
                     market_data = {}
                     for v_name, v_data in villages.items():
                         if v_name != "용병 고용소":
@@ -446,10 +451,13 @@ if doc:
         market_data = st.session_state.market_data
         initial_stocks = st.session_state.initial_stocks
         
-        # 시간 업데이트
-        player, events = update_game_time(player, settings, market_data, initial_stocks)
-        if events:
-            st.session_state.events = events
+        # 시간 업데이트 (10초마다)
+        current_time = time.time()
+        if current_time - st.session_state.last_update > 10:
+            player, events = update_game_time(player, settings, market_data, initial_stocks)
+            if events:
+                st.session_state.events = events
+            st.session_state.last_update = current_time
         
         # 시세 업데이트
         update_prices(settings, items_info, market_data)
@@ -458,30 +466,30 @@ if doc:
         # 이벤트 표시
         if st.session_state.events:
             for event_type, message in st.session_state.events:
-                if event_type == "month":
-                    st.markdown(f"<div class='event-message'>🌙 {message}</div>", unsafe_allow_html=True)
-                elif event_type == "week":
-                    st.markdown(f"<div class='event-message'>🌟 {message}</div>", unsafe_allow_html=True)
-                elif event_type == "season":
-                    season_class = {
-                        "🌸": "season-spring",
-                        "☀️": "season-summer", 
-                        "🍂": "season-autumn",
-                        "❄️": "season-winter"
-                    }.get(message[0], "")
-                    st.markdown(f"<div class='event-message {season_class}'>{message}</div>", unsafe_allow_html=True)
-                else:
-                    st.markdown(f"<div class='event-message'>{message}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='event-message'>{message}</div>", unsafe_allow_html=True)
             st.session_state.events = []
         
-        # 상단 정보
+        # 상단 정보 - 항상 최신 상태로 표시
         st.title(f"🏯 {player['pos']}")
         
+        # 최신 데이터로 메트릭 표시
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric("💰 소지금", f"{player['money']:,}냥")
-        col2.metric("⚖️ 무게", f"{cw}/{tw}근")
-        col3.metric("📅 시간", get_time_display(player))
-        col4.metric("📊 거래", f"{st.session_state.stats['trade_count']}회")
+        
+        # 소지금 메트릭
+        money_placeholder = col1.empty()
+        money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
+        
+        # 무게 메트릭
+        weight_placeholder = col2.empty()
+        weight_placeholder.metric("⚖️ 무게", f"{cw}/{tw}근")
+        
+        # 시간 메트릭
+        time_placeholder = col3.empty()
+        time_placeholder.metric("📅 시간", get_time_display(player))
+        
+        # 거래 횟수 메트릭
+        trade_placeholder = col4.empty()
+        trade_placeholder.metric("📊 거래", f"{st.session_state.stats['trade_count']}회")
         
         st.divider()
         
@@ -504,6 +512,10 @@ if doc:
                                     if player['money'] >= data['price']:
                                         player['money'] -= data['price']
                                         player['mercs'].append(name)
+                                        # 상단 정보 즉시 업데이트
+                                        cw, tw = get_weight(player, items_info, merc_data)
+                                        weight_placeholder.metric("⚖️ 무게", f"{cw}/{tw}근")
+                                        money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
                                         st.success(f"✅ {name} 고용 완료!")
                                         st.rerun()
                                     else:
@@ -534,7 +546,8 @@ if doc:
                             with st.container():
                                 st.markdown(f"**{item_name}** {trend}")
                                 col1, col2, col3 = st.columns([2,1,1])
-                                col1.markdown(f"<span class='{price_class}'>{d['price']:,}냥</span>", unsafe_allow_html=True)
+                                price_placeholder = col1.empty()
+                                price_placeholder.markdown(f"<span class='{price_class}'>{d['price']:,}냥</span>", unsafe_allow_html=True)
                                 col2.write(f"재고: {d['stock']}")
                                 
                                 max_buy = calculate_max_purchase(
@@ -546,6 +559,8 @@ if doc:
                                 # 거래 UI
                                 col_a, col_b, col_c = st.columns([2,1,1])
                                 qty = col_a.text_input("수량", value="1", key=f"qty_{item_name}", label_visibility="collapsed")
+                                
+                                # 매수 버튼
                                 if col_b.button("💰 매수", key=f"buy_{item_name}", use_container_width=True):
                                     try:
                                         qty_int = int(qty)
@@ -554,13 +569,23 @@ if doc:
                                             if actual_qty > 0:
                                                 bought, spent = process_buy(
                                                     player, items_info, market_data,
-                                                    player['pos'], item_name, actual_qty
+                                                    player['pos'], item_name, actual_qty, merc_data
                                                 )
+                                                # 통계 업데이트
                                                 st.session_state.stats['total_bought'] += bought
                                                 st.session_state.stats['total_spent'] += spent
                                                 st.session_state.stats['trade_count'] += 1
+                                                
+                                                # 상단 정보 즉시 업데이트
+                                                money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
+                                                cw, tw = get_weight(player, items_info, merc_data)
+                                                weight_placeholder.metric("⚖️ 무게", f"{cw}/{tw}근")
+                                                trade_placeholder.metric("📊 거래", f"{st.session_state.stats['trade_count']}회")
+                                                
+                                                # 가격 정보 업데이트
+                                                price_placeholder.markdown(f"<span class='{price_class}'>{d['price']:,}냥</span>", unsafe_allow_html=True)
+                                                
                                                 st.success(f"✅ {bought}개 매수 완료! ({spent:,}냥)")
-                                                st.rerun()
                                             else:
                                                 st.error("❌ 구매 가능한 수량이 없습니다")
                                         else:
@@ -568,6 +593,7 @@ if doc:
                                     except:
                                         st.error("❌ 올바른 숫자를 입력하세요")
                                 
+                                # 매도 버튼
                                 if col_c.button("📦 매도", key=f"sell_{item_name}", use_container_width=True):
                                     try:
                                         qty_int = int(qty)
@@ -577,13 +603,23 @@ if doc:
                                             if actual_qty > 0:
                                                 sold, earned = process_sell(
                                                     player, items_info, market_data,
-                                                    player['pos'], item_name, actual_qty
+                                                    player['pos'], item_name, actual_qty, merc_data
                                                 )
+                                                # 통계 업데이트
                                                 st.session_state.stats['total_sold'] += sold
                                                 st.session_state.stats['total_earned'] += earned
                                                 st.session_state.stats['trade_count'] += 1
+                                                
+                                                # 상단 정보 즉시 업데이트
+                                                money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
+                                                cw, tw = get_weight(player, items_info, merc_data)
+                                                weight_placeholder.metric("⚖️ 무게", f"{cw}/{tw}근")
+                                                trade_placeholder.metric("📊 거래", f"{st.session_state.stats['trade_count']}회")
+                                                
+                                                # 가격 정보 업데이트
+                                                price_placeholder.markdown(f"<span class='{price_class}'>{d['price']:,}냥</span>", unsafe_allow_html=True)
+                                                
                                                 st.success(f"✅ {sold}개 매도 완료! ({earned:,}냥)")
-                                                st.rerun()
                                             else:
                                                 st.error("❌ 판매 가능한 수량이 없습니다")
                                         else:
@@ -666,6 +702,8 @@ if doc:
                         if player['money'] >= cost:
                             player['money'] -= cost
                             player['pos'] = dest
+                            # 상단 정보 즉시 업데이트
+                            money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
                             st.success(f"✅ {dest}로 이동했습니다!")
                             st.rerun()
                         else:
@@ -677,14 +715,33 @@ if doc:
             
             # 시간 정보
             st.write("**⏰ 시간 시스템**")
-            st.info(f"현실 3분 = 게임 1달\n\n다음 달까지: {180 - int(time.time() - st.session_state.last_time_update)}초")
+            remaining = 180 - int(time.time() - st.session_state.last_time_update)
+            if remaining < 0:
+                remaining = 0
+            st.info(f"현실 3분 = 게임 1달\n\n다음 달까지: {remaining}초")
             
             st.divider()
             
-            # 저장
+            # 수동 저장
             if st.button("💾 저장", use_container_width=True):
                 if save_player_data(doc, player):
                     st.success("✅ 저장 완료!")
+            
+            # 자동 저장 설정
+            if 'auto_save' not in st.session_state:
+                st.session_state.auto_save = True
+            
+            auto_save = st.toggle("자동 저장", value=st.session_state.auto_save)
+            st.session_state.auto_save = auto_save
+            
+            # 자동 저장 실행 (10초마다)
+            if auto_save and 'last_auto_save' in st.session_state:
+                if time.time() - st.session_state.last_auto_save > 30:
+                    if save_player_data(doc, player):
+                        st.toast("💾 자동 저장 완료!")
+                        st.session_state.last_auto_save = time.time()
+            elif auto_save:
+                st.session_state.last_auto_save = time.time()
             
             # 종료
             if st.button("🚪 메인으로", use_container_width=True):
