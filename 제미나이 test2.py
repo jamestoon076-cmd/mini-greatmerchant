@@ -789,4 +789,4 @@ if doc:
                                                 save_to_session()
                                                 
                                                 avg_price = earned // sold
-                                                st.markdown(f"<div class='trade-complete'>✅ 총 {sold}개 매도 완료! (총 {earned:,}냥 | 평균가: {avg
+                                                st.markdown(f"<div class='trade-complete'>✅ 총 {sold}개 매도 완료! (총 {earned:,}냥 | 평균가: {avg_price:,}냥)</div>", unsafe_allow_html=True)
