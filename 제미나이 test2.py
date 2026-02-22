@@ -4,58 +4,85 @@ import json
 import gspread
 from google.oauth2.service_account import Credentials
 
-# 1. 시트 연결 (Secrets 사용)
+# --- [설정] 페이지 기본 세팅 ---
+st.set_page_config(page_title="조선거상", layout="centered")
+
+# --- [기능] 구글 시트 연결 (Secrets 사용) ---
 def connect_gsheet():
     try:
         scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        creds_info = st.secrets["gspread"]
+        creds_info = st.secrets["gspread"] # 스트림릿 Secrets에서 키 로드
         creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
         return gspread.authorize(creds).open("조선거상_DB")
     except Exception as e:
-        st.error(f"연결 실패: {e}")
+        st.error(f"❌ 연결 실패: {e}. Secrets 설정을 확인하세요!")
         return None
 
-# 데이터 로드
 doc = connect_gsheet()
 
-# --- [안전장치] 데이터 로드 완료 확인 ---
-if doc:
-    # 사용자님의 원본 데이터 로드 함수 호출 (예: load_all_data)
-    # 아래는 예시이며, 실제 원본 로직을 이 블록 안에 두시면 됩니다.
+# --- [기능] 게임 상태 관리 (세션 스테이트) ---
+# 처음 실행 시 게임 접속 상태를 'False'로 초기화하여 슬롯 선택창만 보이게 합니다.
+if 'game_started' not in st.session_state:
+    st.session_state.game_started = False
+if 'player' not in st.session_state:
+    st.session_state.player = None
+
+# --- [화면 1] 세이브 슬롯 선택 (로그인 전) ---
+if not st.session_state.game_started:
     st.title("🏯 조선거상 미니")
-
-    # 2. 세이브 슬롯 선택 (모바일 키보드 문제 해결)
     st.subheader("💾 세이브 슬롯 선택")
-    # text_input을 쓰면 모바일에서 숫자를 직접 칠 수 있는 키보드가 뜹니다.
-    slot_input = st.text_input("슬롯 번호를 입력하세요 (예: 1, 2, 3)", key="slot_select")
     
-    # 엔터 대신 이 버튼을 누르면 게임이 시작됩니다.
+    # 모바일에서 타이핑하기 편하도록 text_input 사용
+    slot_input = st.text_input("슬롯 번호를 입력하세요 (1, 2, 3...)", value="1")
+    
+    # 엔터 대신 이 버튼을 누르면 다음 화면으로 넘어갑니다.
     if st.button("🎮 게임 시작/불러오기", use_container_width=True):
-        if slot_input:
-            st.session_state['connected'] = True
-            st.success(f"{slot_input}번 슬롯 접속 중...")
-            # 여기서 실제 원본 로직의 플레이어 데이터를 세팅하세요.
+        # (실제로는 여기서 doc을 통해 시트 데이터를 읽어오는 로직이 들어갑니다)
+        st.session_state.game_started = True
+        st.session_state.player = {"slot": slot_input, "pos": "한양", "money": 10000} # 임시 데이터
+        st.rerun() # 화면 새로고침하여 거래창으로 이동
 
-    # 3. 물품 거래 섹션 (1000개 대량 구매용)
-    st.divider()
-    st.subheader("🛒 물품 거래")
+# --- [화면 2] 물품 거래 및 이동 (로그인 후) ---
+else:
+    st.title("🏯 조선거상 미니")
     
-    # 아이템 선택
-    # ITEMS_INFO가 로드되었다면 list(ITEMS_INFO.keys())를 넣으세요.
-    item_choice = st.selectbox("거래할 아이템 선택", ["쌀", "고기", "약초"]) # 예시
-    
-    # [핵심] 1000개씩 한 번에 입력하는 칸
-    trade_qty = st.text_input("거래 수량 입력 (직접 타이핑)", value="1", key="qty_input")
-    
+    # 상단 상태바 (모바일 최적화 배치)
+    p = st.session_state.player
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("💰 매수하기", use_container_width=True):
-            st.info(f"{item_choice} {trade_qty}개 매수 시도!")
-            # 원본의 buy(item_choice, int(trade_qty)) 호출
+        st.metric("현재 위치", p['pos'])
     with col2:
-        if st.button("📦 매도하기", use_container_width=True):
-            st.info(f"{item_choice} {trade_qty}개 매도 시도!")
-            # 원본의 sell(item_choice, int(trade_qty)) 호출
+        st.metric("소지 금액", f"{p['money']:,}냥")
+    
+    st.divider()
 
-else:
-    st.error("구글 시트에 연결할 수 없습니다. Secrets 설정을 확인하세요.")
+    # 물품 거래 섹션 (대량 입력 가능)
+    st.subheader("🛒 물품 거래")
+    item = st.selectbox("물건 선택", ["쌀", "고기", "약초"]) # 예시
+    
+    # [핵심] 1000개든 뭐든 직접 타이핑하는 칸
+    qty_str = st.text_input("수량 입력 (숫자만 타이핑)", value="1")
+    
+    btn_col1, btn_col2 = st.columns(2)
+    with btn_col1:
+        if st.button("💰 매수하기", use_container_width=True):
+            try:
+                qty = int(qty_str)
+                st.success(f"{item} {qty}개 매수 완료!")
+            except:
+                st.error("숫자를 입력하세요.")
+                
+    with btn_col2:
+        if st.button("📦 매도하기", use_container_width=True):
+            try:
+                qty = int(qty_str)
+                st.success(f"{item} {qty}개 매도 완료!")
+            except:
+                st.error("숫자를 입력하세요.")
+
+    st.divider()
+    
+    # 로그아웃(슬롯 재선택) 버튼
+    if st.button("↩️ 다른 슬롯 선택하기"):
+        st.session_state.game_started = False
+        st.rerun()
