@@ -53,7 +53,7 @@ def get_initial_data():
         st.error(f"❌ 데이터 로드 오류: {e}")
         return None
 
-# --- 2. 게임 로직 함수 ---
+# --- 2. 로직 함수 ---
 def get_weight(player, items_info, merc_data):
     cw = sum(player['inv'].get(i, 0) * items_info[i]['w'] for i in player['inv'] if i in items_info)
     tw = 200 + sum(merc_data[m]['w_bonus'] for m in player['mercs'] if m in merc_data)
@@ -69,20 +69,20 @@ def get_price(item_name, stock, settings, items_info, month):
     elif month in [12,1,2] and item_name == '가죽갑옷': price = int(price * 1.5)
     return price
 
-# --- 3. 메인 실행 및 화면 ---
+# --- 3. 실행 ---
 st.set_page_config(page_title="조선거상 모바일", layout="centered")
 data = get_initial_data()
 if data:
     SETTINGS, ITEMS_INFO, MERC_DATA, VILLAGES, INITIAL_STOCKS, SLOTS = data
 
-# 세이브 슬롯 선택 (모바일 최적화)
+# 슬롯 선택 화면
 if 'player' not in st.session_state:
     st.title("🏯 조선거상 (슬롯 선택)")
     for s in SLOTS:
         st.write(f"**[{s['slot']}번 슬롯]** {s['pos']} | {int(s.get('money', 0)):,}냥")
     
     choice = st.number_input("슬롯 번호", min_value=1, max_value=len(SLOTS), step=1)
-    if st.button("🎮 게임 시작 (ENTER 대신 클릭)", use_container_width=True):
+    if st.button("🎮 게임 시작하기", use_container_width=True):
         p_row = next(s for s in SLOTS if s['slot'] == choice)
         st.session_state.player = {
             'slot': choice, 'money': int(p_row.get('money', 0)), 'pos': str(p_row.get('pos', '한양')),
@@ -97,24 +97,24 @@ else:
     player = st.session_state.player
     cw, tw = get_weight(player, ITEMS_INFO, MERC_DATA)
     
-    # 45초/3분 시간 로직
+    # [에러 해결!] 시간 로직을 플레이어가 존재할 때만 실행
     now = time.time()
-    if now - player['last_tick'] >= 45:
+    if now - player.get('last_tick', now) >= 45: # cite: 제미나이 test2.py
         player['last_tick'] = now
         player['week'] += 1
         st.toast("📅 1주가 경과했습니다!")
         if player['week'] > 4:
             player['week'] = 1
             player['month'] += 1
-            st.success("📦 월초 재고 초기화 완료!")
+            st.success("📦 월초 재고 초기화!") # cite: 제미나이 test2.py
             if player['month'] > 12: player['month'] = 1; player['year'] += 1
         st.rerun()
 
     # 상단 상태바
     st.subheader(f"📍 {player['pos']}")
-    st.info(f"💰 {player['money']:,}냥 | ⚖️ {cw}/{tw}근\n\n📅 {player['year']}년 {player['month']}월 {player['week']}주")
+    st.info(f"💰 {player['money']:,}냥 | ⚖️ {cw}/{tw}근 | 📅 {player['year']}년 {player['month']}월 {player['week']}주")
 
-    tab1, tab2, tab3, tab4 = st.tabs(["🛒 시장", "🚚 이동", "📦 가방", "💾 시스템"])
+    tab1, tab2, tab3, tab4 = st.tabs(["🛒 시장", "🚚 이동", "📦 가방", "💾 저장"])
 
     with tab1: # 시장
         if player['pos'] == "용병 고용소":
@@ -127,14 +127,15 @@ else:
         else:
             for i_name, stock in VILLAGES[player['pos']]['items'].items():
                 price = get_price(i_name, stock, SETTINGS, ITEMS_INFO, player['month'])
-                st.write(f"**{i_name}** | {price:,}냥 (재고:{stock})")
-                if st.button(f"🛒 {i_name} 1개 구매", key=f"b_{i_name}", use_container_width=True):
-                    if player['money'] >= price and (cw + ITEMS_INFO[i_name]['w']) <= tw:
-                        player['money'] -= price
-                        player['inv'][i_name] = player['inv'].get(i_name, 0) + 1
-                        VILLAGES[player['pos']]['items'][i_name] -= 1
-                        st.rerun()
-                st.divider()
+                with st.container():
+                    st.write(f"**{i_name}** ({price:,}냥 / 재고:{stock})")
+                    if st.button(f"🛒 {i_name} 구매", key=f"b_{i_name}", use_container_width=True):
+                        if player['money'] >= price and (cw + ITEMS_INFO[i_name]['w']) <= tw:
+                            player['money'] -= price
+                            player['inv'][i_name] = player['inv'].get(i_name, 0) + 1
+                            VILLAGES[player['pos']]['items'][i_name] -= 1
+                            st.rerun()
+                    st.divider()
 
     with tab2: # 이동
         for t_name, t_data in VILLAGES.items():
@@ -147,28 +148,27 @@ else:
                     player['pos'] = t_name
                     st.rerun()
 
-    with tab3: # 가방
-        st.write("### 📦 보유 물품")
-        for i, q in player['inv'].items():
+    with tab3: # 가방 & 판매
+        st.write("### 📦 내 가방 (판매 가능)")
+        for i, q in list(player['inv'].items()):
             if q > 0:
-                st.write(f"{i}: {q}개")
-                if st.button(f"💰 {i} 1개 판매", key=f"s_{i}", use_container_width=True):
-                    price = get_price(i, VILLAGES[player['pos']]['items'].get(i, 100), SETTINGS, ITEMS_INFO, player['month'])
+                price = get_price(i, VILLAGES[player['pos']]['items'].get(i, 50), SETTINGS, ITEMS_INFO, player['month'])
+                if st.button(f"💰 {i} 판매 ({q}개 보유 | 개당 {price:,}냥)", key=f"s_{i}", use_container_width=True):
                     player['money'] += price
                     player['inv'][i] -= 1
                     VILLAGES[player['pos']]['items'][i] = VILLAGES[player['pos']]['items'].get(i, 0) + 1
                     st.rerun()
 
     with tab4: # 시스템
-        if st.button("💾 데이터 시트 저장", use_container_width=True):
+        if st.button("💾 데이터 저장", use_container_width=True):
             try:
                 play_ws = connect_gsheet().worksheet("Player_Data")
                 now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 save_v = [player['slot'], player['money'], player['pos'], json.dumps(player['mercs']), 
                           json.dumps(player['inv']), now_str, player['week'], player['month'], player['year']]
                 play_ws.update(f'A{player["slot"]+1}:I{player["slot"]+1}', [save_v])
-                st.success("저장 완료!")
+                st.success("저장 성공!")
             except Exception as e: st.error(f"저장 실패: {e}")
-        if st.button("❌ 메인 화면으로", use_container_width=True):
+        if st.button("❌ 메인으로", use_container_width=True):
             del st.session_state.player
             st.rerun()
