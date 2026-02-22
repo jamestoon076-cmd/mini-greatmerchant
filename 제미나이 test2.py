@@ -790,3 +790,7 @@ if doc:
                                                 
                                                 avg_price = earned // sold
                                                 st.markdown(f"<div class='trade-complete'>✅ 총 {sold}개 매도 완료! (총 {earned:,}냥 | 평균가: {avg_price:,}냥)</div>", unsafe_allow_html=True)
+
+                                                 # [추가] try 문을 닫아주는 except 블록이 누락되었습니다.
+                except Exception as e:
+                st.error(f"거래 중 오류가 발생했습니다: {e}")
