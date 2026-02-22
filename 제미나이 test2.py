@@ -786,11 +786,29 @@ if doc:
                                                 trade_placeholder.metric("📊 거래", f"{st.session_state.stats['trade_count']}회")
                                                 price_placeholder.markdown(f"<span class='{price_class}'>{d['price']:,}냥</span>", unsafe_allow_html=True)
                                                 
+                                                # --- 제미나이 test2.py 780번 라인 근처 수정본 ---
                                                 save_to_session()
                                                 
-                                                avg_price = earned // sold
-                                                st.markdown(f"<div class='trade-complete'>✅ 총 {sold}개 매도 완료! (총 {earned:,}냥 | 평균가: {avg_price:,}냥)</div>", unsafe_allow_html=True)
-
-                                                 # [추가] try 문을 닫아주는 except 블록이 누락되었습니다.
-                except Exception as e:
-                st.error(f"거래 중 오류가 발생했습니다: {e}")
+                                                # 잘렸던 부분 복구 및 문법 오류 수정
+                                                avg_price = earned // sold if sold > 0 else 0
+                                                st.markdown(
+                                                    f"<div class='trade-complete'>✅ 총 {sold}개 매도 완료! "
+                                                    f"(총 {earned:,}냥 | 평균가: {avg_price:,}냥)</div>", 
+                                                    unsafe_allow_html=True
+                                                )
+                                                
+                                            except Exception as e:
+                                                st.error(f"⚠️ 거래 처리 중 오류가 발생했습니다: {e}")
+                                                
+                                        except Exception as e:
+                                            st.error(f"⚠️ 매도 계산 중 오류가 발생했습니다: {e}")
+            
+            except Exception as e:
+                st.error(f"⚠️ 시스템 오류: {e}")
+    
+    # 세션 정보가 없을 경우 슬롯 선택으로 돌아가기
+    else:
+        st.warning("세션이 만료되었습니다. 다시 로그인해주세요.")
+        if st.button("돌아가기"):
+            st.session_state.game_started = False
+            st.rerun()
