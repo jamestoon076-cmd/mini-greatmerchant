@@ -26,7 +26,20 @@ def update_game_time(player, settings, market_data, initial_stocks):
     except Exception as e:
         return player, [("error", f"시간 업데이트 실패: {e}")]
 
-# --- 기존 초기화 및 연결 로직 ---
+# --- 구글 시트 연결 함수 (호출부보다 먼저 정의) ---
+@st.cache_resource
+def connect_gsheet():
+    try:
+        # Streamlit Secrets에서 보안 정보를 가져옴
+        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        creds_info = st.secrets["gspread"] 
+        creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
+        return gspread.authorize(creds).open("조선거상_DB")
+    except Exception as e:
+        st.error(f"❌ 시트 연결 에러: {e}")
+        return None
+
+# --- 기타 함수들 ---
 def init_session():
     if 'session_id' not in st.session_state: st.session_state.session_id = str(uuid.uuid4())
     if 'game_started' not in st.session_state: st.session_state.game_started = False
@@ -65,28 +78,32 @@ def save_player_data(doc, player, stats, device_id):
         st.error(f"❌ 저장 실패: {e}")
         return False
 
-# --- 메인 실행 흐름 (잘린 하단부 포함) ---
-init_session()
-doc = connect_gsheet() # 위에서 정의한 함수 호출
-# --- 3. 구글 시트 연결 함수 (이 부분이 호출부보다 위에 있어야 함) ---
-@st.cache_resource
-def connect_gsheet():
-    try:
-        # Streamlit Secrets에서 보안 정보를 가져옴
-        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        creds_info = st.secrets["gspread"] 
-        creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
-        return gspread.authorize(creds).open("조선거상_DB")
-    except Exception as e:
-        st.error(f"❌ 시트 연결 에러: {e}")
-        return None
+# --- 메인 실행 흐름 ---
+init_session()  # 세션 초기화
+doc = connect_gsheet()  # 이제 함수가 정의된 후에 호출됨
 
 if doc:
     if not st.session_state.game_started:
         # 슬롯 선택 로직 (사용자 코드 유지)
         st.title("🏯 조선거상 미니")
-        # ... (슬롯 선택 UI 생략) ...
+        
+        # 여기에 슬롯 선택 UI 코드가 있어야 함
+        # 예시:
+        slots = ["슬롯 1", "슬롯 2", "슬롯 3"]
+        selected_slot = st.selectbox("슬롯을 선택하세요", slots)
+        
         if st.button("🎮 게임 시작"):
+            # 플레이어 초기화 코드
+            st.session_state.player = {
+                'slot': selected_slot,
+                'money': 10000,
+                'pos': '한양',
+                'mercs': [],
+                'inv': {},
+                'week': 1,
+                'month': 1,
+                'year': 1592
+            }
             st.session_state.game_started = True
             st.rerun()
             
@@ -119,4 +136,3 @@ if doc:
         if st.button("💾 수동 저장"):
             if save_player_data(doc, player, st.session_state.stats, get_device_id()):
                 st.success("✅ 서버에 저장되었습니다!")
-
