@@ -910,7 +910,7 @@ if doc:
             
             st.metric("거래 횟수", f"{stats['trade_count']}회")
         
-                with tab5:
+        with tab5:
             st.subheader("⚙️ 게임 메뉴")
             
             st.write("**🚚 마을 이동**")
@@ -978,6 +978,7 @@ if doc:
         # 0.5초마다 자동 새로고침
         time.sleep(0.5)
         st.rerun()
+
 
 
 
