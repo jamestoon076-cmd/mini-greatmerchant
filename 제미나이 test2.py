@@ -796,4 +796,3 @@ if doc:
             st.divider()
             
             # 시간 정보
-            st.write("**⏰
