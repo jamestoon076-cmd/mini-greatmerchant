@@ -203,7 +203,8 @@ def update_game_time(player, settings, market_data, initial_stocks):
         return player, []
     
     elapsed = current_time - st.session_state.last_time_update
-    months_passed = int(elapsed / 180)  # 3분 = 1달
+    seconds_per_month = 30  # 30초 = 1달 (더 빠르게 체감되도록)
+    months_passed = int(elapsed / seconds_per_month)
     
     events = []
     
@@ -221,55 +222,64 @@ def update_game_time(player, settings, market_data, initial_stocks):
                     player['year'] += 1
         
         st.session_state.last_time_update = current_time
+        st.session_state.last_update = current_time  # last_update도 함께 업데이트
         
         # 월간 이벤트
         if old_month != player['month'] or old_year != player['year']:
             events.append(("month", f"🌙 {player['year']}년 {player['month']}월이 시작되었습니다!"))
             
-            # 재고 초기화
+            # 재고 초기화 - 현재 도시만 초기화
             reset_count = 0
-            for v_name in market_data:
-                if v_name in initial_stocks:
-                    for item_name in market_data[v_name]:
-                        if item_name in initial_stocks[v_name]:
-                            market_data[v_name][item_name]['stock'] = initial_stocks[v_name][item_name]
+            current_city = player['pos']
+            if current_city in initial_stocks and current_city in market_data:
+                for item_name in market_data[current_city]:
+                    if item_name in initial_stocks[current_city]:
+                        old_stock = market_data[current_city][item_name]['stock']
+                        market_data[current_city][item_name]['stock'] = initial_stocks[current_city][item_name]
+                        if old_stock != initial_stocks[current_city][item_name]:
                             reset_count += 1
-            if reset_count > 0:
-                events.append(("reset", f"🔄 {reset_count}개 품목 재고 초기화"))
+                if reset_count > 0:
+                    events.append(("reset", f"🔄 {current_city}의 {reset_count}개 품목 재고 초기화"))
         
         events.append(("week", f"🌟 {player['year']}년 {player['month']}월 {player['week']}주차"))
         
         # 주차별 효과
         if player['week'] == 1:
             events.append(("week_effect", "📅 새 달의 시작! 모든 재고가 보충됩니다."))
-            for v_name in market_data:
-                if v_name in initial_stocks:
-                    for item_name in market_data[v_name]:
-                        if item_name in initial_stocks[v_name]:
-                            market_data[v_name][item_name]['stock'] = initial_stocks[v_name][item_name]
+            if player['pos'] in initial_stocks and player['pos'] in market_data:
+                for item_name in market_data[player['pos']]:
+                    if item_name in initial_stocks[player['pos']]:
+                        market_data[player['pos']][item_name]['stock'] = initial_stocks[player['pos']][item_name]
         
         # 계절 효과
-        if 3 <= player['month'] <= 5:  # 봄
-            events.append(("season", "🌸 봄: 인삼/가죽 수요 증가!"))
-            for v_name in market_data:
-                for item_name in market_data[v_name]:
-                    if item_name in ['인삼', '소가죽', '염색가죽']:
-                        market_data[v_name][item_name]['price'] = int(market_data[v_name][item_name]['price'] * 1.2)
-        elif 6 <= player['month'] <= 8:  # 여름
-            events.append(("season", "☀️ 여름: 비단 수요 증가!"))
-            for v_name in market_data:
-                if '비단' in market_data[v_name]:
-                    market_data[v_name]['비단']['price'] = int(market_data[v_name]['비단']['price'] * 1.3)
-        elif 9 <= player['month'] <= 11:  # 가을
-            events.append(("season", "🍂 가을: 쌀 수요 증가!"))
-            for v_name in market_data:
-                if '쌀' in market_data[v_name]:
-                    market_data[v_name]['쌀']['price'] = int(market_data[v_name]['쌀']['price'] * 1.3)
-        else:  # 겨울
-            events.append(("season", "❄️ 겨울: 가죽갑옷 수요 급증!"))
-            for v_name in market_data:
-                if '가죽갑옷' in market_data[v_name]:
-                    market_data[v_name]['가죽갑옷']['price'] = int(market_data[v_name]['가죽갑옷']['price'] * 1.5)
+        season_effects = {
+            (3,4,5): ("🌸 봄: 인삼/가죽 수요 증가!", ['인삼', '소가죽', '염색가죽'], 1.2),
+            (6,7,8): ("☀️ 여름: 비단 수요 증가!", ['비단'], 1.3),
+            (9,10,11): ("🍂 가을: 쌀 수요 증가!", ['쌀'], 1.3),
+            (12,1,2): ("❄️ 겨울: 가죽갑옷 수요 급증!", ['가죽갑옷'], 1.5)
+        }
+        
+        for months, (msg, items, factor) in season_effects.items():
+            if player['month'] in months:
+                events.append(("season", msg))
+                for v_name in market_data:
+                    for item_name in market_data[v_name]:
+                        if item_name in items:
+                            market_data[v_name][item_name]['price'] = int(market_data[v_name][item_name]['price'] * factor)
+                break
+        
+        # 가격 변동성 추가 (랜덤 이벤트)
+        if random.random() < 0.3:  # 30% 확률로 시세 변동
+            vol_item = random.choice(list(market_data[player['pos']].keys()))
+            vol_direction = random.choice(["상승", "하락"])
+            vol_amount = random.randint(10, 30)
+            
+            if vol_direction == "상승":
+                market_data[player['pos']][vol_item]['price'] = int(market_data[player['pos']][vol_item]['price'] * (1 + vol_amount/100))
+                events.append(("volatility", f"📈 {vol_item} 가격 {vol_amount}% 급등!"))
+            else:
+                market_data[player['pos']][vol_item]['price'] = int(market_data[player['pos']][vol_item]['price'] * (1 - vol_amount/100))
+                events.append(("volatility", f"📉 {vol_item} 가격 {vol_amount}% 급락!"))
     
     return player, events
 
@@ -545,13 +555,13 @@ if doc:
         market_data = st.session_state.market_data
         initial_stocks = st.session_state.initial_stocks
         
-        # 시간 업데이트 (10초마다 체크)
-        current_time = time.time()
-        if current_time - st.session_state.last_update > 10:
-            player, events = update_game_time(player, settings, market_data, initial_stocks)
-            if events:
-                st.session_state.events = events
-            st.session_state.last_update = current_time
+        # 시간 업데이트 (1초마다 체크)
+current_time = time.time()
+if current_time - st.session_state.last_update > 1:  # 1초마다 체크
+    player, events = update_game_time(player, settings, market_data, initial_stocks)
+    if events:
+        st.session_state.events = events
+    st.session_state.last_update = current_time
         
         # 시세 업데이트
         update_prices(settings, items_info, market_data, initial_stocks)
@@ -563,7 +573,8 @@ if doc:
                 st.markdown(f"<div class='event-message'>{message}</div>", unsafe_allow_html=True)
             st.session_state.events = []
         
-        # 상단 정보
+       # 상단 정보
+      # 상단 정보
         st.title(f"🏯 {player['pos']}")
         
         col1, col2, col3, col4 = st.columns(4)
@@ -576,8 +587,18 @@ if doc:
         time_placeholder = col3.empty()
         time_placeholder.metric("📅 시간", get_time_display(player))
         
-        trade_placeholder = col4.empty()
-        trade_placeholder.metric("📊 거래", f"{st.session_state.stats['trade_count']}회")
+        # 다음 달까지 남은 시간
+        remaining = max(0, 30 - int(time.time() - st.session_state.last_time_update))
+        time_left_placeholder = col4.empty()
+        time_left_placeholder.metric("⏰ 다음 달까지", f"{remaining}초")
+        
+        # 거래 횟수는 탭 안으로 이동하거나 다른 곳에 표시
+        trade_count_placeholder = st.empty()  # 별도로 표시
+        
+        st.divider()
+        
+        # 거래 횟수 표시 (상단 정보 아래에 작게)
+        trade_count_placeholder.markdown(f"<div style='text-align: right; color: #666;'>📊 거래 횟수: {st.session_state.stats['trade_count']}회</div>", unsafe_allow_html=True)
         
         st.divider()
         
@@ -881,3 +902,4 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
