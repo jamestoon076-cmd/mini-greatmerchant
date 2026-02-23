@@ -584,159 +584,164 @@ if doc:
         tab1, tab2, tab3, tab4, tab5 = st.tabs(["🛒 거래", "📦 인벤토리", "⚔️ 용병", "📊 통계", "⚙️ 기타"])
         
         # [탭1] 거래
-with tab1:
-    if player['pos'] == "용병 고용소":
-        # ... 용병 고용 코드 ...
-    elif player['pos'] in market_data:
-        items = list(market_data[player['pos']].keys())
-        if items:
-            st.subheader(f"🛒 {player['pos']} 시세")
-            
-            for item_name in items:
-                d = market_data[player['pos']][item_name]
-                base_price = items_info[item_name]['base']
-                
-                # 가격 변동 표시
-                if d['price'] > base_price * 1.1:
-                    price_class = "price-up"
-                    trend = "▲▲"
-                elif d['price'] > base_price:
-                    price_class = "price-up"
-                    trend = "▲"
-                elif d['price'] < base_price * 0.9:
-                    price_class = "price-down"
-                    trend = "▼▼"
-                elif d['price'] < base_price:
-                    price_class = "price-down"
-                    trend = "▼"
+        # [탭1] 거래
+        with tab1:
+            if player['pos'] == "용병 고용소":
+                st.subheader("⚔️ 용병 고용")
+                if merc_data:
+                    for name, data in merc_data.items():
+                        owned = "✓" if name in player['mercs'] else ""
+                        with st.container():
+                            st.info(f"**{name}** {owned}\n\n"
+                                   f"💰 고용비: {data['price']:,}냥\n"
+                                   f"⚖️ 무게보너스: +{data['w_bonus']}근")
+                            if owned:
+                                st.button(f"✅ 이미 고용됨", key=f"merc_{name}", disabled=True, use_container_width=True)
+                            else:
+                                if st.button(f"⚔️ {name} 고용", key=f"merc_{name}", use_container_width=True):
+                                    if player['money'] >= data['price']:
+                                        player['money'] -= data['price']
+                                        player['mercs'].append(name)
+                                        cw, tw = get_weight(player, items_info, merc_data)
+                                        weight_placeholder.metric("⚖️ 무게", f"{cw}/{tw}근")
+                                        money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
+                                        st.success(f"✅ {name} 고용 완료!")
+                                        st.rerun()
+                                    else:
+                                        st.error("❌ 잔액 부족")
                 else:
-                    price_class = "price-same"
-                    trend = "■"
-                
-                with st.container():
-                    st.markdown(f"**{item_name}** {trend}")
+                    st.warning("고용 가능한 용병이 없습니다.")
+            
+            # 일반 마을인 경우
+            elif player['pos'] in market_data:
+                items = list(market_data[player['pos']].keys())
+                if items:
+                    st.subheader(f"🛒 {player['pos']} 시세")
                     
-                    col1, col2, col3 = st.columns([2,1,1])
-                    price_placeholder = col1.empty()
-                    price_placeholder.markdown(f"<span class='{price_class}'>{d['price']:,}냥</span>", unsafe_allow_html=True)
-                    
-                    stock_placeholder = col2.empty()  # ← 재고용 placeholder 추가
-                    stock_placeholder.write(f"📦 {d['stock']}개")
-                    
-                    max_buy = calculate_max_purchase(
-                        player, items_info, market_data, 
-                        player['pos'], item_name, d['price']
-                    )
-                    max_placeholder = col3.empty()  # ← 최대 구매량용 placeholder 추가
-                    max_placeholder.write(f"⚡ {max_buy}개")
-                    
-                    # 거래 UI
-                    col_a, col_b, col_c = st.columns([2,1,1])
-                    qty = col_a.text_input("수량", value="1", key=f"qty_{item_name}", label_visibility="collapsed")
-                    
-                    # 진행상황 표시 영역
-                    progress_placeholder = st.empty()
-                    
-                    # 매수 버튼
-                    if col_b.button("💰 매수", key=f"buy_{item_name}", use_container_width=True):
-                        try:
-                            qty_int = int(qty)
-                            if qty_int > 0:
-                                actual_qty = min(qty_int, max_buy)
-                                if actual_qty > 0:
-                                    progress_placeholder.markdown("<div class='trade-progress'></div>", unsafe_allow_html=True)
-                                    
-                                    bought, spent, trade_log = process_buy(
-                                        player, items_info, market_data,
-                                        player['pos'], item_name, actual_qty, progress_placeholder
-                                    )
-                                    
-                                    if bought > 0:
-                                        # 통계 업데이트
-                                        st.session_state.stats['total_bought'] += bought
-                                        st.session_state.stats['total_spent'] += spent
-                                        st.session_state.stats['trade_count'] += 1
-                                        
-                                        # 상단 정보 업데이트
-                                        money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
-                                        cw, tw = get_weight(player, items_info, merc_data)
-                                        weight_placeholder.metric("⚖️ 무게", f"{cw}/{tw}근")
-                                        trade_placeholder.metric("📊 거래", f"{st.session_state.stats['trade_count']}회")
-                                        
-                                        # 가격, 재고, 최대구매량 업데이트
-                                        price_placeholder.markdown(f"<span class='{price_class}'>{d['price']:,}냥</span>", unsafe_allow_html=True)
-                                        stock_placeholder.write(f"📦 {d['stock']}개")  # ← 재고 업데이트
-                                        
-                                        # 최대 구매량 재계산
-                                        new_max_buy = calculate_max_purchase(
-                                            player, items_info, market_data, 
-                                            player['pos'], item_name, d['price']
-                                        )
-                                        max_placeholder.write(f"⚡ {new_max_buy}개")
-                                        
-                                        # 최종 완료 메시지
-                                        avg_price = spent // bought
-                                        st.markdown(f"<div class='trade-complete'>✅ 총 {bought}개 매수 완료! (총 {spent:,}냥 | 평균가: {avg_price}냥)</div>", unsafe_allow_html=True)
+                    for item_name in items:
+                        d = market_data[player['pos']][item_name]
+                        base_price = items_info[item_name]['base']
+                        
+                        # 가격 변동 표시
+                        if d['price'] > base_price * 1.1:
+                            price_class = "price-up"
+                            trend = "▲▲"
+                        elif d['price'] > base_price:
+                            price_class = "price-up"
+                            trend = "▲"
+                        elif d['price'] < base_price * 0.9:
+                            price_class = "price-down"
+                            trend = "▼▼"
+                        elif d['price'] < base_price:
+                            price_class = "price-down"
+                            trend = "▼"
+                        else:
+                            price_class = "price-same"
+                            trend = "■"
+                        
+                        with st.container():
+                            st.markdown(f"**{item_name}** {trend}")
+                            
+                            col1, col2, col3 = st.columns([2,1,1])
+                            price_placeholder = col1.empty()
+                            price_placeholder.markdown(f"<span class='{price_class}'>{d['price']:,}냥</span>", unsafe_allow_html=True)
+                            col2.write(f"📦 {d['stock']}개")
+                            
+                            max_buy = calculate_max_purchase(
+                                player, items_info, market_data, 
+                                player['pos'], item_name, d['price']
+                            )
+                            col3.write(f"⚡ {max_buy}개")
+                            
+                            # 거래 UI
+                            col_a, col_b, col_c = st.columns([2,1,1])
+                            qty = col_a.text_input("수량", value="1", key=f"qty_{item_name}", label_visibility="collapsed")
+                            
+                            # 진행상황 표시 영역
+                            progress_placeholder = st.empty()
+                            
+                            # 매수 버튼
+                            if col_b.button("💰 매수", key=f"buy_{item_name}", use_container_width=True):
+                                try:
+                                    qty_int = int(qty)
+                                    if qty_int > 0:
+                                        actual_qty = min(qty_int, max_buy)
+                                        if actual_qty > 0:
+                                            progress_placeholder.markdown("<div class='trade-progress'></div>", unsafe_allow_html=True)
+                                            
+                                            bought, spent, trade_log = process_buy(
+                                                player, items_info, market_data,
+                                                player['pos'], item_name, actual_qty, progress_placeholder
+                                            )
+                                            
+                                            if bought > 0:
+                                                st.session_state.stats['total_bought'] += bought
+                                                st.session_state.stats['total_spent'] += spent
+                                                st.session_state.stats['trade_count'] += 1
+                                                
+                                                money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
+                                                cw, tw = get_weight(player, items_info, merc_data)
+                                                weight_placeholder.metric("⚖️ 무게", f"{cw}/{tw}근")
+                                                trade_placeholder.metric("📊 거래", f"{st.session_state.stats['trade_count']}회")
+                                                
+                                                price_placeholder.markdown(f"<span class='{price_class}'>{d['price']:,}냥</span>", unsafe_allow_html=True)
+                                                
+                                                avg_price = spent // bought
+                                                st.markdown(f"<div class='trade-complete'>✅ 총 {bought}개 매수 완료! (총 {spent:,}냥 | 평균가: {avg_price}냥)</div>", unsafe_allow_html=True)
+                                            else:
+                                                st.error("❌ 구매 실패")
+                                        else:
+                                            st.error("❌ 구매 가능한 수량이 없습니다")
                                     else:
-                                        st.error("❌ 구매 실패")
-                                else:
-                                    st.error("❌ 구매 가능한 수량이 없습니다")
-                            else:
-                                st.error("❌ 0보다 큰 수량을 입력하세요")
-                        except ValueError:
-                            st.error("❌ 올바른 숫자를 입력하세요")
-                    
-                    # 매도 버튼 (비슷하게 수정)
-                    if col_c.button("📦 매도", key=f"sell_{item_name}", use_container_width=True):
-                        try:
-                            qty_int = int(qty)
-                            if qty_int > 0:
-                                max_sell = player['inv'].get(item_name, 0)
-                                actual_qty = min(qty_int, max_sell)
-                                if actual_qty > 0:
-                                    progress_placeholder.markdown("<div class='trade-progress'></div>", unsafe_allow_html=True)
-                                    
-                                    sold, earned, trade_log = process_sell(
-                                        player, items_info, market_data,
-                                        player['pos'], item_name, actual_qty, progress_placeholder
-                                    )
-                                    
-                                    if sold > 0:
-                                        # 통계 업데이트
-                                        st.session_state.stats['total_sold'] += sold
-                                        st.session_state.stats['total_earned'] += earned
-                                        st.session_state.stats['trade_count'] += 1
-                                        
-                                        # 상단 정보 업데이트
-                                        money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
-                                        cw, tw = get_weight(player, items_info, merc_data)
-                                        weight_placeholder.metric("⚖️ 무게", f"{cw}/{tw}근")
-                                        trade_placeholder.metric("📊 거래", f"{st.session_state.stats['trade_count']}회")
-                                        
-                                        # 가격, 재고, 최대구매량 업데이트
-                                        price_placeholder.markdown(f"<span class='{price_class}'>{d['price']:,}냥</span>", unsafe_allow_html=True)
-                                        stock_placeholder.write(f"📦 {d['stock']}개")  # ← 재고 업데이트
-                                        
-                                        # 최대 구매량 재계산
-                                        new_max_buy = calculate_max_purchase(
-                                            player, items_info, market_data, 
-                                            player['pos'], item_name, d['price']
-                                        )
-                                        max_placeholder.write(f"⚡ {new_max_buy}개")
-                                        
-                                        # 최종 완료 메시지
-                                        avg_price = earned // sold
-                                        st.markdown(f"<div class='trade-complete'>✅ 총 {sold}개 매도 완료! (총 {earned:,}냥 | 평균가: {avg_price}냥)</div>", unsafe_allow_html=True)
+                                        st.error("❌ 0보다 큰 수량을 입력하세요")
+                                except ValueError:
+                                    st.error("❌ 올바른 숫자를 입력하세요")
+                            
+                            # 매도 버튼
+                            if col_c.button("📦 매도", key=f"sell_{item_name}", use_container_width=True):
+                                try:
+                                    qty_int = int(qty)
+                                    if qty_int > 0:
+                                        max_sell = player['inv'].get(item_name, 0)
+                                        actual_qty = min(qty_int, max_sell)
+                                        if actual_qty > 0:
+                                            progress_placeholder.markdown("<div class='trade-progress'></div>", unsafe_allow_html=True)
+                                            
+                                            sold, earned, trade_log = process_sell(
+                                                player, items_info, market_data,
+                                                player['pos'], item_name, actual_qty, progress_placeholder
+                                            )
+                                            
+                                            if sold > 0:
+                                                st.session_state.stats['total_sold'] += sold
+                                                st.session_state.stats['total_earned'] += earned
+                                                st.session_state.stats['trade_count'] += 1
+                                                
+                                                money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
+                                                cw, tw = get_weight(player, items_info, merc_data)
+                                                weight_placeholder.metric("⚖️ 무게", f"{cw}/{tw}근")
+                                                trade_placeholder.metric("📊 거래", f"{st.session_state.stats['trade_count']}회")
+                                                
+                                                price_placeholder.markdown(f"<span class='{price_class}'>{d['price']:,}냥</span>", unsafe_allow_html=True)
+                                                
+                                                avg_price = earned // sold
+                                                st.markdown(f"<div class='trade-complete'>✅ 총 {sold}개 매도 완료! (총 {earned:,}냥 | 평균가: {avg_price}냥)</div>", unsafe_allow_html=True)
+                                            else:
+                                                st.error("❌ 판매 실패")
+                                        else:
+                                            st.error("❌ 판매 가능한 수량이 없습니다")
                                     else:
-                                        st.error("❌ 판매 실패")
-                                else:
-                                    st.error("❌ 판매 가능한 수량이 없습니다")
-                            else:
-                                st.error("❌ 0보다 큰 수량을 입력하세요")
-                        except ValueError:
-                            st.error("❌ 올바른 숫자를 입력하세요")
-                    
-                    st.divider()
+                                        st.error("❌ 0보다 큰 수량을 입력하세요")
+                                except ValueError:
+                                    st.error("❌ 올바른 숫자를 입력하세요")
+                            
+                            st.divider()
+                else:
+                    st.warning("이 마을에는 판매 품목이 없습니다.")
+            
+            # 그 외의 경우 (market_data에 없는 마을)
+            else:
+                st.warning("시장 정보를 불러올 수 없습니다.")
         
         # [탭2] 인벤토리
         with tab2:
@@ -848,6 +853,7 @@ with tab5:
             st.write("이동 가능한 마을이 없습니다")
             
             # 시간 정보
+
 
 
 
