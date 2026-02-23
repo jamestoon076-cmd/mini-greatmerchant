@@ -300,7 +300,7 @@ def get_time_display(player):
     return f"{player['year']}년 {month_names[player['month']-1]} {player['week']}주차"
 
 # --- 6. 게임 로직 함수들 ---
-def update_prices(settings, items_info, market_data, villages):
+def update_prices(settings, items_info, market_data, villages)  # villages 전달
     """
     villages: st.session_state.villages (초기재고가 저장된 원본 데이터)
     """
@@ -934,6 +934,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
