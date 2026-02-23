@@ -645,9 +645,20 @@ if doc:
                             default_qty = st.session_state.last_qty.get(f"{player['pos']}_{item_name}", "1")
                             qty = col_a.text_input("수량", value=default_qty, key=f"qty_{item_name}", label_visibility="collapsed")
                             
+                            # 진행상황 표시 영역 - 항상 최근 로그 표시
                             progress_ph = st.empty()
                             
-                           if col_b.button("💰 매수", key=f"buy_{item_name}", use_container_width=True):
+                            # 저장된 로그가 있으면 표시
+                            for key in list(st.session_state.trade_logs.keys()):
+                                if key.startswith(f"{player['pos']}_{item_name}"):
+                                    with progress_ph.container():
+                                        st.markdown("<div class='trade-progress'>", unsafe_allow_html=True)
+                                        for log in st.session_state.trade_logs[key][-10:]:
+                                            st.markdown(f"<div class='trade-line'>{log}</div>", unsafe_allow_html=True)
+                                        st.markdown("</div>", unsafe_allow_html=True)
+                                    break
+                            
+                            if col_b.button("💰 매수", key=f"buy_{item_name}", use_container_width=True):
                                 try:
                                     qty_int = int(qty)
                                     if qty_int > 0:
@@ -655,12 +666,7 @@ if doc:
                                         if actual_qty > 0:
                                             st.session_state.last_qty[f"{player['pos']}_{item_name}"] = "1"
                                             
-                                            for key in list(st.session_state.trade_logs.keys()):
-                                if key.startswith(f"{player['pos']}_{item_name}"):
-                                    with progress_ph.container():
-                                        for log in st.session_state.trade_logs[key][-10:]:
-                                            st.markdown(f"<div class='trade-line'>{log}</div>", unsafe_allow_html=True)
-                                    break
+                                            log_key = f"{player['pos']}_{item_name}_{time.time()}"
                                             
                                             bought, spent = process_buy(
                                                 player, items_info, market_data,
@@ -705,14 +711,9 @@ if doc:
                                         if actual_qty > 0:
                                             st.session_state.last_qty[f"{player['pos']}_{item_name}"] = "1"
                                             
-                                            for key in list(st.session_state.trade_logs.keys()):
-                                                if key.startswith(f"{player['pos']}_{item_name}"):
-                                                    del st.session_state.trade_logs[key]
+                                            log_key = f"{player['pos']}_{item_name}_{time.time()}"
                                             
-                                           log_key = f"{player['pos']}_{item_name}_{time.time()}"
-                                            progress_ph.markdown("<div class='trade-progress'></div>", unsafe_allow_html=True)
-                                            
-                                            bought, spent = process_buy(
+                                            sold, earned = process_sell(
                                                 player, items_info, market_data,
                                                 player['pos'], item_name, actual_qty, progress_ph, log_key
                                             )
@@ -862,4 +863,3 @@ if doc:
         # 0.5초마다 자동 새로고침 (시간 실시간 업데이트)
         time.sleep(0.5)
         st.rerun()
-
