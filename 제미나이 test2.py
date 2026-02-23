@@ -7,10 +7,9 @@ import time
 from datetime import datetime
 import pandas as pd
 
-# --- 1. 페이지 설정 및 초기화 ---
+# --- 1. 페이지 설정 및 세션 초기화 ---
 st.set_page_config(page_title="조선거상 미니", page_icon="🏯", layout="wide")
 
-# 매매 로그 유지를 위한 세션 상태
 if 'trade_logs' not in st.session_state:
     st.session_state.trade_logs = []
 
@@ -34,20 +33,26 @@ def load_static_db():
         return settings, items, mercs
     except: return None
 
-# --- 3. 핵심 엔진 함수 ---
+# --- 3. 안전한 데이터 변환 함수 (핵심 에러 방지) ---
+def safe_int(val, default=0):
+    """문자열, None, 빈값을 안전하게 정수로 변환"""
+    if val is None: return default
+    s_val = str(val).strip().replace(',', '')
+    if not s_val or s_val == "": return default
+    try:
+        return int(float(s_val))
+    except:
+        return default
+
 def get_status(player, items_info, mercs_info):
-    # 인벤토리 무게 합계
-    curr_w = sum(int(count) * items_info.get(item, {}).get('w', 0) for item, count in player['inventory'].items())
-    # 기본 1000 + 용병 보너스
+    curr_w = sum(safe_int(count) * items_info.get(item, {}).get('w', 0) for item, count in player['inventory'].items())
     max_w = 1000 + sum(mercs_info.get(m, {}).get('w_bonus', 0) for m in player['mercs'])
     return curr_w, max_w
 
 def calculate_price(item_name, stock, items_info, settings):
     base = items_info.get(item_name, {}).get('base', 100)
     vol = settings.get('volatility', 5000) / 1000
-    try:
-        curr_s = int(str(stock).replace(',','')) if stock else 5000
-    except: curr_s = 5000
+    curr_s = safe_int(stock, 5000)
     ratio = 5000 / max(1, curr_s) 
     return int(base * max(0.5, min(20.0, math.pow(ratio, (vol / 4)))))
 
@@ -63,7 +68,7 @@ def sync_engine(doc):
         except: pass
     return (c_month // 12)+1, (c_month % 12)+1, ((elapsed % 180) // 45)+1, 45-(elapsed % 45)
 
-# --- 4. 메인 실행부 ---
+# --- 4. 메인 게임 로직 ---
 static_data = load_static_db()
 if static_data:
     settings, items_info, mercs_info = static_data
@@ -76,7 +81,7 @@ if static_data:
         for i, p in enumerate(slots):
             if st.button(f"슬롯 {i+1} 접속 ({p['pos']})"):
                 st.session_state.player = {
-                    'money': int(p['money']), 'pos': p['pos'],
+                    'money': safe_int(p['money']), 'pos': p['pos'],
                     'inventory': json.loads(p['inventory']) if p['inventory'] else {},
                     'mercs': json.loads(p['mercs']) if p['mercs'] else []
                 }
@@ -87,7 +92,7 @@ if static_data:
         player = st.session_state.player
         c_w, m_w = get_status(player, items_info, mercs_info)
 
-        # [상단 UI]
+        # 상단 실시간 UI
         st.markdown(f"""
         <div style="background:#1a1a1a; color:#0f0; padding:15px; border-radius:10px; border:2px solid #444;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -105,11 +110,9 @@ if static_data:
             v_data = st.session_state.villages[v_idx]
 
             for item in items_info.keys():
-                s_raw = v_data.get(item, 0)
-                s_val = int(s_raw) if str(s_raw).isdigit() else 0
+                s_val = safe_int(v_data.get(item, 0))
                 price = calculate_price(item, s_val, items_info, settings)
-                my_s = int(player['inventory'].get(item, 0))
-                
+                my_s = safe_int(player['inventory'].get(item, 0))
                 c1, c2, c3 = st.columns([2, 1, 1])
                 c1.write(f"**{item}** (재고:{s_val:,} | 보유:{my_s:,})")
                 c2.write(f"**{price:,}냥**")
@@ -118,7 +121,7 @@ if static_data:
             if 'active_trade' in st.session_state:
                 at = st.session_state.active_trade
                 st.divider()
-                st.subheader(f"📦 {at} 매매")
+                st.subheader(f"📦 {at} 매매 실행")
                 amt = st.number_input("수량", 1, 100000, 100)
                 b_col, s_col = st.columns(2)
                 
@@ -130,23 +133,19 @@ if static_data:
                     st.session_state.trade_logs = []
                     while done < amt:
                         curr_weight, max_weight = get_status(player, items_info, mercs_info)
-                        cur_s = int(v_data[at])
+                        cur_s = safe_int(v_data.get(at, 0))
                         p_now = calculate_price(at, cur_s, items_info, settings)
                         batch = min(100, amt - done)
-                        
-                        # 무게 체크
                         if curr_weight + (batch * items_info[at]['w']) > max_weight:
                             batch = max(0, int((max_weight - curr_weight) // items_info[at]['w']))
-                            if batch <= 0: st.session_state.trade_logs.append("🛑 무게 한도 초과!"); break
-                        
+                            if batch <= 0: st.session_state.trade_logs.append("🛑 무게 초과!"); break
                         if cur_s < batch: batch = cur_s
                         if player['money'] < (p_now * batch) or batch <= 0: break
-
                         player['money'] -= (p_now * batch)
                         player['inventory'][at] = player['inventory'].get(at, 0) + batch
-                        v_data[at] = int(v_data[at]) - batch
+                        v_data[at] = safe_int(v_data[at]) - batch
                         done += batch
-                        st.session_state.trade_logs.append(f"✅ {done}/{amt}개 매수 완료... (단가: {p_now:,}냥)")
+                        st.session_state.trade_logs.append(f"✅ {done}/{amt}개 체결... (단가: {p_now:,}냥)")
                         time.sleep(0.01)
                     doc.worksheet("Village_Data").update_cell(v_idx+2, list(v_data.keys()).index(at)+1, v_data[at])
                     st.rerun()
@@ -154,81 +153,62 @@ if static_data:
         with tab2: # 이동
             st.subheader("🚩 팔도 강산 이동")
             cols = st.columns(3)
-            for idx, v in enumerate(st.session_state.villages):
-                if v['village_name'] == player['pos']: continue
+            villages_to_show = [v for v in st.session_state.villages if v['village_name'] != player['pos']]
+            for idx, v in enumerate(villages_to_show):
                 with cols[idx % 3]:
                     if st.button(f"🚩 {v['village_name']}", use_container_width=True, key=f"mv_{v['village_name']}"):
                         player['pos'] = v['village_name']
                         st.rerun()
 
-        with tab3: # 용병 고용/해고
-            st.subheader("⚔️ 용병 주막")
-            if player['pos'] != "용병 고용소": st.warning("용병 관리는 '용병 고용소'에서만 가능합니다.")
-            for m_name, m_info in mercs_info.items():
-                mc1, mc2, mc3 = st.columns([2, 1, 1])
-                mc1.write(f"**{m_name}** (+{m_info['w_bonus']:,} 斤)")
-                mc2.write(f"{m_info['price']:,}냥")
-                if mc3.button("고용", key=f"buy_{m_name}"):
-                    if player['money'] >= m_info['price']:
-                        player['money'] -= m_info['price']
-                        player['mercs'].append(m_name)
-                        st.rerun()
-            st.divider()
-            for idx, m_name in enumerate(player['mercs']):
-                rc1, rc2 = st.columns([3, 1])
-                rc1.write(f"{idx+1}. **{m_name}**")
-                if rc2.button("해고", key=f"fire_{idx}"):
-                    player['money'] += int(mercs_info[m_name]['price'] * 0.5)
-                    player['mercs'].pop(idx)
-                    st.rerun()
-
-        with tab4: # 통계 및 분석 (요청하신 기능)
-            st.subheader("📊 상단 보고서")
+        with tab4: # 통계 및 분석 (에러 수정 및 기능 강화)
+            st.subheader("📊 상단 분석 보고서")
+            current_v_idx = next(i for i, v in enumerate(st.session_state.villages) if v['village_name'] == player['pos'])
+            cv_data = st.session_state.villages[current_v_idx]
             
-            # 1. 인벤토리 가치 계산 (현재지 기준)
             total_inv_val = 0
-            inv_data = []
+            inv_rows = []
             for item, count in player['inventory'].items():
-                if count > 0:
-                    cur_s = int(v_data.get(item, 5000))
-                    p_now = calculate_price(item, cur_s, items_info, settings)
-                    val = count * p_now
-                    total_inv_val += val
-                    inv_data.append({
-                        "품목": item, "수량": f"{count:,}개", 
-                        "무게": f"{count * items_info[item]['w']:,}斤",
-                        "현재가": f"{p_now:,}냥", "평가액": f"{val:,}냥"
-                    })
-            
+                cnt = safe_int(count)
+                if cnt <= 0: continue
+                cur_s = safe_int(cv_data.get(item, 5000))
+                p_now = calculate_price(item, cur_s, items_info, settings)
+                val = cnt * p_now
+                total_inv_val += val
+                inv_rows.append({
+                    "품목": item, "수량": f"{cnt:,}", "총무게": f"{cnt * items_info[item]['w']:,}斤",
+                    "현재가": f"{p_now:,}냥", "평가액": f"{val:,}냥"
+                })
+
             m1, m2, m3 = st.columns(3)
             m1.metric("💰 총 자산", f"{player['money'] + total_inv_val:,}냥")
             m2.metric("💵 현금", f"{player['money']:,}냥")
-            m3.metric("📦 물품 가치", f"{total_inv_val:,}냥")
-
-            st.markdown("#### 🎒 내 인벤토리 현황")
-            if inv_data: st.table(pd.DataFrame(inv_data))
-            else: st.write("보유 물품이 없습니다.")
+            m3.metric("📦 물품 시가", f"{total_inv_val:,}냥")
+            
+            st.markdown("#### 🎒 인벤토리 현황 및 순익 분석")
+            if inv_rows: st.table(pd.DataFrame(inv_rows))
+            else: st.info("보유 중인 물품이 없습니다.")
 
             st.divider()
-            st.markdown("#### 🔍 전국 시세 분석 (최저가/최고가 도시)")
-            market_list = []
+            st.markdown("#### 🔍 전국 품목별 최적 도시 분석")
+            market_rows = []
             for item in items_info.keys():
                 all_prices = []
                 for v in st.session_state.villages:
-                    s = int(v.get(item, 5000))
+                    # [핵심 수정] 모든 마을의 재고를 안전하게 가져옴
+                    s = safe_int(v.get(item, 5000))
                     p = calculate_price(item, s, items_info, settings)
                     all_prices.append((p, v['village_name']))
                 
                 all_prices.sort()
                 min_p, min_v = all_prices[0]
                 max_p, max_v = all_prices[-1]
-                market_list.append({
+                market_rows.append({
                     "품목": item, 
-                    "최저가 도시": f"{min_v} ({min_p:,})", 
-                    "최고가 도시": f"{max_v} ({max_p:,})",
-                    "이익률": f"{((max_p/min_p)-1)*100:.1f}%"
+                    "가장 싼 곳": f"{min_v} ({min_p:,}냥)", 
+                    "가장 비싼 곳": f"{max_v} ({max_p:,}냥)",
+                    "수익률": f"{((max_p/min_p)-1)*100:.1f}%"
                 })
-            st.table(pd.DataFrame(market_list))
+            st.table(pd.DataFrame(market_rows))
 
         with tab5: # 저장
             if st.button("💾 데이터 저장"):
