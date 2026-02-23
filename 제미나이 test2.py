@@ -68,6 +68,18 @@ def save_player_data(doc, player, stats, device_id):
 # --- 메인 실행 흐름 (잘린 하단부 포함) ---
 init_session()
 doc = connect_gsheet() # 위에서 정의한 함수 호출
+# --- 3. 구글 시트 연결 함수 (이 부분이 호출부보다 위에 있어야 함) ---
+@st.cache_resource
+def connect_gsheet():
+    try:
+        # Streamlit Secrets에서 보안 정보를 가져옴
+        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        creds_info = st.secrets["gspread"] 
+        creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
+        return gspread.authorize(creds).open("조선거상_DB")
+    except Exception as e:
+        st.error(f"❌ 시트 연결 에러: {e}")
+        return None
 
 if doc:
     if not st.session_state.game_started:
@@ -107,3 +119,4 @@ if doc:
         if st.button("💾 수동 저장"):
             if save_player_data(doc, player, st.session_state.stats, get_device_id()):
                 st.success("✅ 서버에 저장되었습니다!")
+
