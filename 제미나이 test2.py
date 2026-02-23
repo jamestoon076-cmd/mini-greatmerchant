@@ -388,7 +388,7 @@ def process_buy(player, items_info, market_data, pos, item_name, qty, progress_p
         can_pay = player['money'] // target['price'] if target['price'] > 0 else 0
         can_load = (tw - cw) // items_info[item_name]['w'] if items_info[item_name]['w'] > 0 else 999999
         
-        batch = min(10, qty - total_bought, target['stock'], can_pay, can_load)
+        batch = min(100, qty - total_bought, target['stock'], can_pay, can_load)
         
         if batch <= 0:
             break
@@ -410,7 +410,7 @@ def process_buy(player, items_info, market_data, pos, item_name, qty, progress_p
             for log in trade_log[-5:]:
                 st.markdown(f"<div class='trade-line'>{log}</div>", unsafe_allow_html=True)
         
-        time.sleep(0.1)
+        time.sleep(0.3)
     
     return total_bought, total_spent, trade_log
 
@@ -445,7 +445,7 @@ def process_sell(player, items_info, market_data, pos, item_name, qty, progress_
             for log in trade_log[-5:]:
                 st.markdown(f"<div class='trade-line'>{log}</div>", unsafe_allow_html=True)
         
-        time.sleep(0.1)
+        time.sleep(0.3)
     
     return total_sold, total_earned, trade_log
 
@@ -785,3 +785,4 @@ if doc:
                 st.write("고용한 용병이 없습니다")
         
         # [탭4] 통계
+
