@@ -300,64 +300,53 @@ def get_time_display(player):
     return f"{player['year']}년 {month_names[player['month']-1]} {player['week']}주차"
 
 # --- 6. 게임 로직 함수들 ---
-def update_prices(settings, items_info, market_data, villages):
-    # settings에서 모든 값 가져오기
+def update_prices(settings, items_info, market_data, initial_stocks=None):
+    if initial_stocks is None:
+        initial_stocks = st.session_state.get('initial_stocks', {})
+    
+    villages = st.session_state.get('villages', {})
+    
+    # 설정값 로드 (Setting_Data 시트 기준)
     ratio_extreme_high = settings.get('ratio_extreme_high', 2.0)
+    factor_extreme_high = settings.get('factor_extreme_high', 0.5)
     ratio_high = settings.get('ratio_high', 1.5)
-    ratio_above_normal = settings.get('ratio_above_normal', 1.0)
-    ratio_normal = settings.get('ratio_normal', 0.7)
-    ratio_low = settings.get('ratio_low', 0.4)
-    
-    factor_extreme_high = settings.get('factor_extreme_high', 0.2)
-    factor_high = settings.get('factor_high', 0.7)
-    factor_above_normal = settings.get('factor_above_normal', 0.85)
+    factor_high = settings.get('factor_high', 0.8)
+    ratio_normal = settings.get('ratio_normal', 1.0)
     factor_normal = settings.get('factor_normal', 1.0)
-    factor_low = settings.get('factor_low', 1.3)
-    factor_extreme_low = settings.get('factor_extreme_low', 2.0)
-    
-    min_price_rate = 0.4  # 최소 가격 비율 (설정에 없으면 기본값)
-    max_price_rate = 3.0   # 최대 가격 비율
-    
+    ratio_low = settings.get('ratio_low', 0.5)
+    factor_extreme_low = settings.get('factor_extreme_low', 2.0) # 재고 적으면 2배
+
     for v_name, v_data in market_data.items():
-        if v_name == "용병 고용소":
-            continue
+        if v_name == "용병 고용소": continue
             
         for i_name, i_info in v_data.items():
             if i_name in items_info:
                 base = items_info[i_name]['base']
                 stock = i_info['stock']
                 
-                # villages에서 초기재고 가져오기
+                # ✅ 핵심 수정: Village_Data에 설정된 초기 재고를 기준으로 삼음
+                # 부산 생선(5000개) vs 평양 생선(200개)의 기준점이 달라짐
                 if v_name in villages and i_name in villages[v_name]['items']:
-                    initial_stock = villages[v_name]['items'][i_name]
+                    standard_stock = villages[v_name]['items'][i_name]
                 else:
-                    initial_stock = 100
+                    standard_stock = 100 # 데이터가 없을 경우 기본값
                 
                 if stock <= 0:
-                    i_info['price'] = int(base * max_price_rate)
+                    i_info['price'] = int(base * 3.0) # 품절 시 3배
                 else:
-                    stock_ratio = stock / initial_stock
+                    # 현재 재고가 초기 설정값 대비 어느 정도인지 계산
+                    stock_ratio = stock / standard_stock
                     
-                    # 재고 비율에 따른 가격 계수 결정
-                    if stock_ratio > ratio_extreme_high:
+                    if stock_ratio >= ratio_extreme_high:
                         price_factor = factor_extreme_high
-                    elif stock_ratio > ratio_high:
+                    elif stock_ratio >= ratio_high:
                         price_factor = factor_high
-                    elif stock_ratio > ratio_above_normal:
-                        price_factor = factor_above_normal
-                    elif stock_ratio > ratio_normal:
-                        price_factor = factor_normal
-                    elif stock_ratio > ratio_low:
-                        price_factor = factor_low
+                    elif stock_ratio <= ratio_low:
+                        price_factor = factor_extreme_low  # 재고가 기준의 절반 이하면 가격 폭등
                     else:
-                        price_factor = factor_extreme_low
+                        price_factor = factor_normal
                     
                     i_info['price'] = int(base * price_factor)
-                    
-                    # 최소 가격 제한
-                    min_price = int(base * min_price_rate)
-                    if i_info['price'] < min_price:
-                        i_info['price'] = min_price
                     
 def get_weight(player, items_info, merc_data):
     cw = 0
@@ -939,6 +928,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
