@@ -139,7 +139,18 @@ if doc:
                 
                 if v_row:
                     for item_name, info in items_info.items():
-                        stock = int(v_row.get(item_name, 0))
+                        # --- 수정 후 (안전한 방식) ---
+                        raw_stock = v_row.get(item_name, 0)
+                        
+                        # 값이 없거나 공백 문자열인 경우 0으로 처리, 그 외에는 숫자로 변환
+                        if raw_stock == "" or raw_stock is None:
+                            stock = 0
+                        else:
+                            try:
+                                stock = int(raw_stock)
+                            except ValueError:
+                                stock = 0 # 숫자가 아닌 값이 들어있을 경우 예외 처리
+                        
                         price = get_current_price(item_name, stock, items_info, settings)
                         
                         with st.container():
@@ -214,3 +225,4 @@ if doc:
                 if st.button("🚪 타이틀로 돌아가기", use_container_width=True):
                     st.session_state.game_started = False
                     st.rerun()
+
