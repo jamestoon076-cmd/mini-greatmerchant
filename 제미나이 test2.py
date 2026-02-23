@@ -634,6 +634,7 @@ if doc:
                 st.markdown(f"<div class='event-message'>{message}</div>", unsafe_allow_html=True)
             st.session_state.events = []
         
+       # 상단 정보
         st.title(f"🏯 {player['pos']}")
         
         col1, col2, col3, col4 = st.columns(4)
@@ -646,7 +647,10 @@ if doc:
         time_placeholder = col3.empty()
         time_placeholder.metric("📅 시간", get_time_display(player))
         
-        remaining = max(0, 30 - int(time.time() - st.session_state.last_time_update))
+        # ✅ settings에서 seconds_per_month 가져와서 남은 시간 계산
+        seconds_per_month = settings.get('seconds_per_month', 30)
+        elapsed = time.time() - st.session_state.last_time_update
+        remaining = max(0, seconds_per_month - int(elapsed))
         time_left_placeholder = col4.empty()
         time_left_placeholder.metric("⏰ 다음 달까지", f"{remaining}초")
         
@@ -981,6 +985,7 @@ if doc:
         # 0.5초마다 자동 새로고침
         time.sleep(0.5)
         st.rerun()
+
 
 
 
