@@ -304,6 +304,14 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
     if initial_stocks is None:
         initial_stocks = st.session_state.get('initial_stocks', {})
     
+    # 🔥🔥🔥 강제 디버깅: initial_stocks 전체 출력
+    st.write("### 🔍 initial_stocks 전체 데이터")
+    st.json(initial_stocks)
+    
+    # Setting_Data에서 직접 값을 가져옴
+    ratio_extreme_high = settings.get('ratio_extreme_high', 2.0)
+    # ... 나머지 코드 ...
+    
     # Setting_Data에서 직접 값을 가져옴
     ratio_extreme_high = settings.get('ratio_extreme_high', 2.0)
     ratio_high = settings.get('ratio_high', 1.5)
@@ -953,6 +961,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
