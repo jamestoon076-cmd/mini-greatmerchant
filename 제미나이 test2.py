@@ -73,7 +73,7 @@ def connect_gsheet():
         return None
 
 # --- 3. 데이터 로드 함수 ---
-코드를 변경해야할거 아님
+
 # --- 4. 세션 초기화 함수 ---
 def init_session_state():
     if 'game_started' not in st.session_state:
@@ -841,6 +841,7 @@ if doc:
         # 0.5초마다 자동 새로고침 (시간 실시간 업데이트)
         time.sleep(0.5)
         st.rerun()
+
 
 
 
