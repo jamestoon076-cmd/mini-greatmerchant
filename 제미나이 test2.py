@@ -279,19 +279,74 @@ def get_time_display(player):
     return f"{player['year']}년 {month_names[player['month']-1]} {player['week']}주차"
 
 # --- 6. 게임 로직 함수들 ---
-def update_prices(settings, items_info, market_data):
-    vol = settings.get('volatility', 500)
+def update_prices(settings, items_info, market_data, initial_stocks=None):
+    if initial_stocks is None:
+        initial_stocks = st.session_state.get('initial_stocks', {})
+    
     for v_name, v_data in market_data.items():
         for i_name, i_info in v_data.items():
             if i_name in items_info:
                 base = items_info[i_name]['base']
                 stock = i_info['stock']
+                
+                # 초기 재고량 가져오기
+                initial_stock = initial_stocks.get(v_name, {}).get(i_name, 100)
+                if initial_stock <= 0:
+                    initial_stock = 100  # 안전장치
+                
                 if stock <= 0:
-                    i_info['price'] = int(base * 10)
+                    i_info['price'] = int(base * 10)  # 품절시 가격 10배
                 else:
-                    # 가격 변동성 추가
-                    random_factor = random.uniform(0.9, 1.1)
-                    i_info['price'] = int(base * (1 + (vol / (stock + 10))) * random_factor)
+                    # 재고 비율에 따른 가격 결정
+                    stock_ratio = stock / initial_stock
+                    
+                    # 재고 많을수록 가격 하락, 적을수록 상승
+                    if stock_ratio > 2.0:  # 재고 매우 과다
+                        price_factor = 0.5  # 50% 하락
+                    elif stock_ratio > 1.5:  # 재고 과다
+                        price_factor = 0.7  # 30% 하락
+                    elif stock_ratio > 1.0:  # 재고 많음
+                        price_factor = 0.9  # 10% 하락
+                    elif stock_ratio > 0.7:  # 적정 재고
+                        price_factor = 1.0  # 기준가
+                    elif stock_ratio > 0.4:  # 재고 부족
+                        price_factor = 1.3  # 30% 상승
+                    elif stock_ratio > 0.2:  # 재고 매우 부족
+                        price_factor = 1.6  # 60% 상승
+                    else:  # 재고 거의 없음
+                        price_factor = 2.0  # 100% 상승
+                    
+                    # 지역별 특산물 가격 보정
+                    region_discounts = {
+                        "부산": ["생선", "멸치", "굴비", "대구", "명태"],
+                        "강원도": ["감자", "옥수수", "송이버섯"],
+                        "전라도": ["쌀", "배추", "고추"],
+                        "경상도": ["사과", "배", "소고기"],
+                        "충청도": ["인삼", "약초"],
+                        "제주도": ["감귤", "해산물", "돼지고기"],
+                        "한양": []  # 수도는 모든 물가 비쌈
+                    }
+                    
+                    # 지역별 보정
+                    for region, items in region_discounts.items():
+                        if v_name == region and i_name in items:
+                            price_factor *= 0.8  # 산지는 20% 저렴
+                            break
+                    
+                    # 한양은 모든 물가 20% 비쌈
+                    if v_name == "한양":
+                        price_factor *= 1.2
+                    
+                    # 용병 고용소는 가격 변동 없음
+                    if v_name == "용병 고용소":
+                        price_factor = 1.0
+                    
+                    i_info['price'] = int(base * price_factor)
+                    
+                    # 최소 가격 보장 (너무 싸지는 것 방지)
+                    min_price = int(base * 0.3)
+                    if i_info['price'] < min_price:
+                        i_info['price'] = min_price
 
 def get_weight(player, items_info, merc_data):
     cw = 0
@@ -796,3 +851,4 @@ if doc:
             st.divider()
             
             # 시간 정보
+
