@@ -111,7 +111,7 @@ if data:
                     c1.write(f"**{item_name}** ({stock}개)")
                     c2.write(f"{price:,}냥")
                     if c3.button("선택", key=f"sel_{item_name}"):
-                        st.session_state.active_trade = {'name': item_name, 'price': price, 'stock': stock}
+                        st.session_state.active_trade = {'name': item_name, 'price': price}
                 
                 if 'active_trade' in st.session_state:
                     at = st.session_state.active_trade
@@ -120,94 +120,71 @@ if data:
                     target_amt = st.number_input("거래 희망 수량", 1, 100000, 100)
                     
                     b_col, s_col = st.columns(2)
-                    log_placeholder = st.empty() # 실시간 메시지 출력창
+                    log_placeholder = st.empty() 
 
-                # --- 실시간 매수 로직 (수정본) ---
-                if b_col.button("일괄 매수 시작"):
-                    total_cost = 0
-                    current_got = 0
-                    logs = [f"구매 수량 >> {target_amt}"]
-                    
-                    while current_got < target_amt:
-                        # 1. 현재 재고를 바탕으로 실시간 가격 재계산
-                        current_stock = v_data.get(at['name'], 0)
-                        # 가격 계산 함수 호출 (재고가 줄어들면 가격은 올라감)
-                        dynamic_price = calculate_price(at['name'], current_stock, item_max_stocks, items_info, settings)
+                    # --- [매수 로직] ---
+                    if b_col.button("일괄 매수 시작"):
+                        total_cost, current_got = 0, 0
+                        logs = [f"구매 수량 >> {target_amt}"]
                         
-                        batch = min(100, target_amt - current_got)
+                        while current_got < target_amt:
+                            # 실시간 가격 & 재고 확인
+                            curr_stock = v_data.get(at['name'], 0)
+                            dynamic_price = calculate_price(at['name'], curr_stock, item_max_stocks, items_info, settings)
                             
-                        # 재고 부족 체크 (마을 재고보다 많이 살 수 없음)
-                        if current_stock < batch:
-                            batch = current_stock
-                            if batch <= 0:
-                                logs.append("❌ 마을 재고가 바닥났습니다.")
-                                break
-                
-                        step_cost = dynamic_price * batch
-                        
-                        if player['money'] < step_cost:
-                            logs.append("❌ 잔액이 부족하여 중단되었습니다.")
-                            break
+                            batch = min(100, target_amt - current_got)
+                            if curr_stock < batch: # 재고 부족 시 남은 만큼만 매수
+                                batch = curr_stock
+                                if batch <= 0: logs.append("❌ 마을 재고가 없습니다."); break
+
+                            step_cost = dynamic_price * batch
+                            if player['money'] < step_cost: logs.append("❌ 잔액 부족!"); break
                             
-                            # 2. 데이터 갱신 (플레이어 돈/인벤토리 & 마을 재고)
+                            # 데이터 처리
                             player['money'] -= step_cost
                             player['inventory'][at['name']] = player['inventory'].get(at['name'], 0) + batch
-                            v_data[at['name']] -= batch  # 마을 재고 감소 (이것이 가격을 올림)
+                            v_data[at['name']] -= batch # 재고 감소 -> 가격 상승 유도
                             
                             current_got += batch
                             total_cost += step_cost
                             avg_price = total_cost / current_got
                             
-                            # 3. 로그 출력 (매번 변하는 dynamic_price 표시)
-                            logs.append(f"➤ {current_got}/{target_amt} 구매 중... (체결가: {dynamic_price:,}냥 / 평균가: {int(avg_price):,}냥)")
+                            logs.append(f"➤ {current_got}/{target_amt} 매수 중... (가: {dynamic_price:,}냥 / 평단: {int(avg_price):,}냥)")
                             log_placeholder.markdown(f'<div class="log-box">{"<br>".join(logs[-5:])}</div>', unsafe_allow_html=True)
-                            
                             time.sleep(0.3)
                         
-                            logs.append(f"✅ 총 {current_got}개 구매 완료!")
-                            log_placeholder.markdown(f'<div class="log-box">{"<br>".join(logs[-6:])}</div>', unsafe_allow_html=True)
-                            
-                            # 데이터 갱신
-                            player['money'] -= step_cost
-                            player['inventory'][at['name']] = player['inventory'].get(at['name'], 0) + batch
-                            current_got += batch
-                            total_cost += step_cost
-                            avg_price = total_cost / current_got
-                            
-                            logs.append(f"➤ {current_got}/{target_amt} 구매 중... (체결가: {at['price']:,}냥 / 평균가: {int(avg_price):,}냥)")
-                            log_placeholder.markdown(f'<div class="log-box">{"<br>".join(logs[-5:])}</div>', unsafe_allow_html=True)
-                            
-                            time.sleep(0.3)
-                        
-                        logs.append(f"✅ 총 {current_got}개 구매 완료했습니다.")
+                        logs.append(f"✅ 총 {current_got}개 매수 완료!")
                         log_placeholder.markdown(f'<div class="log-box">{"<br>".join(logs[-6:])}</div>', unsafe_allow_html=True)
-                        st.button("거래 종료(새로고침)")
 
-                    # --- 실시간 매도 로직 ---
+                    # --- [매도 로직] ---
                     if s_col.button("일괄 매도 시작"):
-                        total_revenue = 0
-                        current_sold = 0
+                        total_rev, current_sold = 0, 0
                         my_stock = player['inventory'].get(at['name'], 0)
                         actual_target = min(target_amt, my_stock)
                         logs = [f"판매 수량 >> {actual_target}"]
 
                         while current_sold < actual_target:
-                            batch = min(100, actual_target - current_sold)
-                            step_rev = at['price'] * batch
+                            # 실시간 가격 & 재고 확인
+                            curr_stock = v_data.get(at['name'], 0)
+                            dynamic_price = calculate_price(at['name'], curr_stock, item_max_stocks, items_info, settings)
                             
+                            batch = min(100, actual_target - current_sold)
+                            step_rev = dynamic_price * batch
+                            
+                            # 데이터 처리
                             player['money'] += step_rev
                             player['inventory'][at['name']] -= batch
+                            v_data[at['name']] += batch # 재고 증가 -> 가격 하락 유도
+                            
                             current_sold += batch
-                            total_revenue += step_rev
+                            total_rev += step_rev
                             
-                            logs.append(f"➤ {current_sold}/{actual_target} 판매 중... (체결가: {at['price']:,}냥)")
+                            logs.append(f"➤ {current_sold}/{actual_target} 매도 중... (체결가: {dynamic_price:,}냥)")
                             log_placeholder.markdown(f'<div class="log-box">{"<br>".join(logs[-5:])}</div>', unsafe_allow_html=True)
-                            
                             time.sleep(0.3)
                         
-                        logs.append(f"✅ 총 {current_sold}개 판매 완료했습니다.")
+                        logs.append(f"✅ 총 {current_sold}개 매도 완료!")
                         log_placeholder.markdown(f'<div class="log-box">{"<br>".join(logs[-6:])}</div>', unsafe_allow_html=True)
-                        st.button("거래 종료(새로고침)")
 
         with tab2: # 이동
             countries = list(regions.keys())
@@ -275,6 +252,7 @@ if data:
                             st.rerun()
                         else: st.error("용병단이 가득 찼습니다.")
                     else: st.error("자금이 부족합니다.")
+
 
 
 
