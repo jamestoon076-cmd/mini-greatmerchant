@@ -336,33 +336,32 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
                         
                         if initial_stock <= 0:
                             initial_stock = 100
-                
-                if stock <= 0:
-                    i_info['price'] = int(base * max_price_rate)
-                else:
-                    stock_ratio = stock / initial_stock
-                    
-                    # ✅ 스프레드시트 값으로 가격 결정
-                    if stock_ratio > ratio_extreme_high:
-                        price_factor = factor_extreme_high
-                    elif stock_ratio > ratio_high:
-                        price_factor = factor_high
-                    elif stock_ratio > ratio_above_normal:
-                        price_factor = factor_above_normal
-                    elif stock_ratio > ratio_normal:
-                        price_factor = factor_normal
-                    elif stock_ratio > ratio_low:
-                        price_factor = factor_low
-                    else:
-                        price_factor = factor_extreme_low
-                    
-                    i_info['price'] = int(base * price_factor)
-                    
-                    min_price = int(base * min_price_rate)
-                    if i_info['price'] < min_price:
-                        i_info['price'] = min_price
-                    if i_info['price'] > base * max_price_rate:
-                        i_info['price'] = int(base * max_price_rate)
+                        
+                        if stock <= 0:
+                            i_info['price'] = int(base * max_price_rate)
+                        else:
+                            stock_ratio = stock / initial_stock
+                            
+                            if stock_ratio > ratio_extreme_high:
+                                price_factor = factor_extreme_high
+                            elif stock_ratio > ratio_high:
+                                price_factor = factor_high
+                            elif stock_ratio > ratio_above_normal:
+                                price_factor = factor_above_normal
+                            elif stock_ratio > ratio_normal:
+                                price_factor = factor_normal
+                            elif stock_ratio > ratio_low:
+                                price_factor = factor_low
+                            else:
+                                price_factor = factor_extreme_low
+                            
+                            i_info['price'] = int(base * price_factor)
+                            
+                            min_price = int(base * min_price_rate)
+                            if i_info['price'] < min_price:
+                                i_info['price'] = min_price
+                            if i_info['price'] > base * max_price_rate:
+                                i_info['price'] = int(base * max_price_rate)
 
 def get_weight(player, items_info, merc_data):
     cw = 0
@@ -944,6 +943,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
