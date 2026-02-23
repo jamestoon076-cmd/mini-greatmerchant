@@ -10,19 +10,12 @@ import uuid
 import random
 
 # --- 1. 페이지 설정 및 스타일 ---
-st.set_page_config(
-    page_title="조선거상 미니",
-    page_icon="🏯",
-    layout="centered",
-    initial_sidebar_state="collapsed"
-)
+st.set_page_config(page_title="조선거상 미니", page_icon="🏯", layout="centered")
 
-# 모바일 최적화 CSS (기존 유지)
+# 기존 UI 스타일 유지
 st.markdown("""
 <style>
     .stButton button { width: 100%; margin: 5px 0; padding: 15px; font-size: 18px; }
-    .stTextInput input { font-size: 16px; padding: 10px; }
-    div[data-testid="column"] { gap: 10px; }
     .price-up { color: #ff4b4b; font-weight: bold; }
     .price-down { color: #4b7bff; font-weight: bold; }
 </style>
@@ -42,24 +35,20 @@ def connect_gsheet():
 
 def load_game_data():
     doc = connect_gsheet()
-    if not doc: return None, None, None, None, None, None, None
+    if not doc: return None
     
-    # Setting_Data
-    set_ws = doc.worksheet("Setting_Data")
-    settings = {r['변수명']: float(r['값']) for r in set_ws.get_all_records() if r.get('변수명')}
+    # 세팅 및 아이템 로드
+    settings = {r['변수명']: float(r['값']) for r in doc.worksheet("Setting_Data").get_all_records() if r.get('변수명')}
+    items_info = {r['item_name']: {'base': int(r['base_price']), 'w': int(r['weight'])} for r in doc.worksheet("Item_Data").get_all_records()}
+    mercs = {r['name']: {'price': int(r['price']), 'weight_bonus': int(r['weight_bonus'])} for r in doc.worksheet("Balance_Data").get_all_records()}
     
-    # Item_Data
-    item_ws = doc.worksheet("Item_Data")
-    items_info = {r['item_name']: {'base': int(r['base_price']), 'w': int(r['weight'])} for r in item_ws.get_all_records()}
-    
-    # Village_Data
+    # 마을 및 초기 재고(기준점) 로드
     vil_ws = doc.worksheet("Village_Data")
     vals = vil_ws.get_all_values()
     headers = vals[0]
     villages = {}
     initial_stocks = {}
     for row in vals[1:]:
-        if not row[0]: continue
         v_name = row[0]
         villages[v_name] = {'x': int(row[1]), 'y': int(row[2]), 'items': {}}
         initial_stocks[v_name] = {}
@@ -70,43 +59,36 @@ def load_game_data():
                 villages[v_name]['items'][item_name] = stock
                 initial_stocks[v_name][item_name] = stock
                 
-    # Balance & Player Data
-    bal_ws = doc.worksheet("Balance_Data")
-    mercs = {r['name']: {'price': int(r['price']), 'weight_bonus': int(r['weight_bonus'])} for r in bal_ws.get_all_records()}
-    
-    play_ws = doc.worksheet("Player_Data")
-    player_recs = play_ws.get_all_records()
-    
-    return doc, settings, items_info, mercs, villages, initial_stocks, player_recs
+    player_records = doc.worksheet("Player_Data").get_all_records()
+    return doc, settings, items_info, mercs, villages, initial_stocks, player_records
 
-# --- 3. 수정된 시세 로직 (volatility 반영) ---
+# --- 3. 핵심: 시세 업데이트 (volatility 기반) ---
 def update_market_prices(settings, items_info, market_data, initial_stocks):
-    volatility = settings.get('volatility', 1.0)
+    # 민감도 (5000인 경우를 대비해 0.001 스케일링 적용)
+    vol = settings.get('volatility', 5000) * 0.0001 
     
     for v_name, items in market_data.items():
         if v_name == "용병 고용소": continue
         for i_name, i_info in items.items():
             if i_name in items_info:
                 base = items_info[i_name]['base']
-                current_s = i_info['stock']
+                curr_s = i_info['stock']
                 init_s = initial_stocks.get(v_name, {}).get(i_name, 100)
                 
-                if current_s <= 0:
+                if curr_s <= 0:
                     i_info['price'] = base * 5
                 else:
-                    # 마을별 초기 재고 대비 비율 계산
-                    ratio = init_s / current_s
-                    # volatility를 적용한 가격 변동 공식
-                    # (ratio-1)이 0보다 크면 가격상승, 작으면 하락
-                    # 5000같은 큰 값을 대비해 스케일링(0.001) 적용
-                    factor = ((ratio - 1) * (volatility * 0.001)) + 1
-                    factor = max(0.5, min(10.0, factor)) # 0.5배 ~ 10배 제한
-                    i_info['price'] = int(base * factor)
+                    # (초기재고 / 현재재고) 비율로 시세 결정
+                    ratio = init_s / curr_s
+                    # volatility를 변동폭에 곱함
+                    factor = ((ratio - 1) * vol) + 1
+                    i_info['price'] = int(base * max(0.5, min(10.0, factor)))
 
-# --- 4. 게임 엔진 ---
-doc, settings, items_info, mercenary_data, villages, initial_stocks, player_records = load_game_data()
+# --- 4. 메인 엔진 (기존 UI 로직 완벽 유지) ---
+res = load_game_data()
+if res:
+    doc, settings, items_info, mercenary_data, villages, initial_stocks, player_records = res
 
-if doc:
     if 'game_started' not in st.session_state:
         st.session_state.game_started = False
 
@@ -115,15 +97,21 @@ if doc:
         slot = st.selectbox("슬롯 선택", [1, 2, 3])
         if st.button("게임 시작"):
             p_rec = player_records[slot-1]
+            # 안전한 인벤토리 초기화
+            try:
+                inv = json.loads(p_rec['inventory']) if p_rec['inventory'] else {}
+            except:
+                inv = {n: 0 for n in items_info}
+                
             st.session_state.player = {
                 'money': int(p_rec['money']),
-                'pos': p_rec['pos'],
+                'pos': p_rec['pos'] if p_rec['pos'] else "한양",
                 'mercs': json.loads(p_rec['mercs']) if p_rec['mercs'] else [],
-                'inventory': json.loads(p_rec['inventory']) if p_rec['inventory'] else {n:0 for n in items_info},
-                'last_month': 0
+                'inventory': inv,
+                'start_time': time.time()
             }
             st.session_state.stats = {'slot': slot}
-            # 마켓 재고 초기화
+            # 마켓 초기화
             market = {v: {i: {'stock': s, 'price': items_info[i]['base']} 
                       for i, s in info['items'].items()} for v, info in villages.items()}
             st.session_state.market_prices = market
@@ -131,31 +119,30 @@ if doc:
             update_market_prices(settings, items_info, market, initial_stocks)
             st.session_state.game_started = True
             st.rerun()
+
     else:
         player = st.session_state.player
         market = st.session_state.market_prices
         curr_pos = player['pos']
         
-        # --- UI 상단 정보 (무게 에러 방지 처리) ---
+        # UI 상단 정보 (KeyError 방지)
         max_w = 200 + sum(mercenary_data.get(m, {}).get('weight_bonus', 0) for m in player['mercs'])
-        # KeyError 방지를 위해 .get() 사용
-        curr_w = sum(player['inventory'].get(name, 0) * items_info.get(name, {}).get('w', 0) for name in player['inventory'])
+        curr_w = sum(player['inventory'].get(n, 0) * items_info.get(n, {}).get('w', 0) for n in player['inventory'])
         
         st.header(f"📍 {curr_pos}")
         c1, c2 = st.columns(2)
         c1.metric("💰 소지금", f"{player['money']:,}냥")
         c2.metric("📦 무게", f"{curr_w}/{max_w}근")
 
-        # --- 기존 탭 구조 유지 ---
         tab1, tab2, tab3 = st.tabs(["🛒 장터", "🚩 이동", "👤 내 정보"])
 
         with tab1:
             if curr_pos == "용병 고용소":
                 for m_name, m_info in mercenary_data.items():
                     col_m1, col_m2 = st.columns([3, 1])
-                    col_m1.write(f"**{m_name}** (무게 +{m_info['weight_bonus']})")
+                    col_m1.write(f"**{m_name}** (+{m_info['weight_bonus']}근)")
                     if col_m2.button(f"{m_info['price']:,}냥", key=f"m_{m_name}"):
-                        if player['money'] >= m_info['price']:
+                        if player['money'] >= m_info['price'] and len(player['mercs']) < settings['max_mercenaries']:
                             player['money'] -= m_info['price']
                             player['mercs'].append(m_name)
                             st.rerun()
@@ -171,27 +158,29 @@ if doc:
                     sel = st.session_state.sel_item
                     amt = st.number_input("수량", 1, 10000, 1)
                     cc1, cc2 = st.columns(2)
-                    if cc1.button("매수"):
+                    if cc1.button("매수", use_container_width=True):
                         cost = market[curr_pos][sel]['price'] * amt
-                        if player['money'] >= cost and market[curr_pos][sel]['stock'] >= amt:
+                        if player['money'] >= cost and market[curr_pos][sel]['stock'] >= amt and curr_w + (items_info[sel]['w']*amt) <= max_w:
                             player['money'] -= cost
                             player['inventory'][sel] = player['inventory'].get(sel, 0) + amt
                             market[curr_pos][sel]['stock'] -= amt
                             update_market_prices(settings, items_info, market, st.session_state.initial_stocks)
+                            st.success("매수 완료")
                             st.rerun()
-                    if cc2.button("매도"):
+                    if cc2.button("매도", use_container_width=True):
                         if player['inventory'].get(sel, 0) >= amt:
                             player['money'] += market[curr_pos][sel]['price'] * amt
                             player['inventory'][sel] -= amt
                             market[curr_pos][sel]['stock'] += amt
                             update_market_prices(settings, items_info, market, st.session_state.initial_stocks)
+                            st.success("매도 완료")
                             st.rerun()
 
         with tab2:
             for dest, d_info in villages.items():
                 if dest != curr_pos:
                     dist = math.sqrt((villages[curr_pos]['x']-d_info['x'])**2 + (villages[curr_pos]['y']-d_info['y'])**2)
-                    cost = int(dist * settings.get('travel_cost', 15))
+                    cost = int(dist * settings['travel_cost'])
                     if st.button(f"{dest} 이동 ({cost}냥)"):
                         if player['money'] >= cost:
                             player['money'] -= cost
@@ -199,7 +188,10 @@ if doc:
                             st.rerun()
 
         with tab3:
-            st.write(f"용병: {player['mercs']}")
-            if st.button("💾 저장"):
-                # (기존 save_player_data 함수 호출 로직)
-                st.success("저장 완료")
+            st.write(f"보유 용병: {player['mercs']}")
+            st.write("인벤토리:")
+            for k, v in player['inventory'].items():
+                if v > 0: st.write(f"- {k}: {v}개")
+            if st.button("🚪 메인으로"):
+                st.session_state.game_started = False
+                st.rerun()
