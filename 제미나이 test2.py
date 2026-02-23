@@ -810,7 +810,7 @@ if doc:
             
             st.metric("거래 횟수", f"{stats['trade_count']}회")
         
-                     with tab5:
+                            with tab5:
             st.subheader("⚙️ 게임 메뉴")
             
             st.write("**🚚 마을 이동**")
@@ -859,7 +859,6 @@ if doc:
                 st.cache_data.clear()
                 st.rerun()
         
-        # ⭐⭐⭐ 여기에 이 코드만 추가! ⭐⭐⭐
         # 0.5초마다 자동 새로고침 (시간 실시간 업데이트)
         time.sleep(0.5)
         st.rerun()
