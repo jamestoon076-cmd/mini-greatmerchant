@@ -33,6 +33,8 @@ st.markdown("""
         margin: 10px 0;
         font-family: monospace;
         font-size: 14px;
+        max-height: 200px;
+        overflow-y: auto;
     }
     .trade-line {
         padding: 3px 0;
@@ -43,6 +45,9 @@ st.markdown("""
         font-weight: bold;
         font-size: 16px;
         margin-top: 10px;
+        padding: 10px;
+        background-color: #f0fff0;
+        border-radius: 5px;
     }
     .event-message {
         background-color: #e8f4fd;
@@ -75,11 +80,9 @@ def load_game_data():
         return None, None, None, None, None, None
     
     try:
-        # 설정 데이터 로드
         set_ws = doc.worksheet("Setting_Data")
         settings = {r['변수명']: float(r['값']) for r in set_ws.get_all_records()}
         
-        # 아이템 정보 로드
         item_ws = doc.worksheet("Item_Data")
         items_info = {}
         for r in item_ws.get_all_records():
@@ -90,7 +93,6 @@ def load_game_data():
                     'w': int(r['weight'])
                 }
         
-        # 용병 정보 로드
         bal_ws = doc.worksheet("Balance_Data")
         merc_data = {}
         for r in bal_ws.get_all_records():
@@ -101,7 +103,6 @@ def load_game_data():
                     'w_bonus': int(r.get('weight_bonus', 0))
                 }
         
-        # 마을 데이터 로드
         vil_ws = doc.worksheet("Village_Data")
         vil_vals = vil_ws.get_all_values()
         headers = [h.strip() for h in vil_vals[0]]
@@ -133,7 +134,6 @@ def load_game_data():
                             except:
                                 pass
         
-        # 플레이어 데이터 로드
         play_ws = doc.worksheet("Player_Data")
         slots = []
         for r in play_ws.get_all_records():
@@ -193,6 +193,10 @@ def init_session_state():
         st.session_state.device_id = hashlib.md5(session_key.encode()).hexdigest()[:12]
     if 'last_save_time' not in st.session_state:
         st.session_state.last_save_time = time.time()
+    if 'trade_logs' not in st.session_state:
+        st.session_state.trade_logs = {}
+    if 'last_qty' not in st.session_state:
+        st.session_state.last_qty = {}
 
 # --- 5. 시간 시스템 함수 ---
 def update_game_time(player, settings, market_data, initial_stocks):
@@ -203,7 +207,7 @@ def update_game_time(player, settings, market_data, initial_stocks):
         return player, []
     
     elapsed = current_time - st.session_state.last_time_update
-    seconds_per_month = 30  # 30초 = 1달
+    seconds_per_month = 30
     months_passed = int(elapsed / seconds_per_month)
     
     events = []
@@ -224,34 +228,23 @@ def update_game_time(player, settings, market_data, initial_stocks):
         st.session_state.last_time_update = current_time
         st.session_state.last_update = current_time
         
-        # 월간 이벤트
         if old_month != player['month'] or old_year != player['year']:
             events.append(("month", f"🌙 {player['year']}년 {player['month']}월이 시작되었습니다!"))
             
-            # 재고 초기화 - 현재 도시만 초기화
             reset_count = 0
-            current_city = player['pos']
-            if current_city in initial_stocks and current_city in market_data:
-                for item_name in market_data[current_city]:
-                    if item_name in initial_stocks[current_city]:
-                        old_stock = market_data[current_city][item_name]['stock']
-                        market_data[current_city][item_name]['stock'] = initial_stocks[current_city][item_name]
-                        if old_stock != initial_stocks[current_city][item_name]:
-                            reset_count += 1
-                if reset_count > 0:
-                    events.append(("reset", f"🔄 {current_city}의 {reset_count}개 품목 재고 초기화"))
+            for v_name in market_data:
+                if v_name in initial_stocks:
+                    for item_name in market_data[v_name]:
+                        if item_name in initial_stocks[v_name]:
+                            old_stock = market_data[v_name][item_name]['stock']
+                            market_data[v_name][item_name]['stock'] = initial_stocks[v_name][item_name]
+                            if old_stock != initial_stocks[v_name][item_name]:
+                                reset_count += 1
+            if reset_count > 0:
+                events.append(("reset", f"🔄 {reset_count}개 품목 재고 초기화"))
         
         events.append(("week", f"🌟 {player['year']}년 {player['month']}월 {player['week']}주차"))
         
-        # 주차별 효과
-        if player['week'] == 1:
-            events.append(("week_effect", "📅 새 달의 시작! 모든 재고가 보충됩니다."))
-            if player['pos'] in initial_stocks and player['pos'] in market_data:
-                for item_name in market_data[player['pos']]:
-                    if item_name in initial_stocks[player['pos']]:
-                        market_data[player['pos']][item_name]['stock'] = initial_stocks[player['pos']][item_name]
-        
-        # 계절 효과
         season_effects = {
             (3,4,5): ("🌸 봄: 인삼/가죽 수요 증가!", ['인삼', '소가죽', '염색가죽'], 1.2),
             (6,7,8): ("☀️ 여름: 비단 수요 증가!", ['비단'], 1.3),
@@ -262,24 +255,24 @@ def update_game_time(player, settings, market_data, initial_stocks):
         for months, (msg, items, factor) in season_effects.items():
             if player['month'] in months:
                 events.append(("season", msg))
-                for v_name in market_data:
-                    for item_name in market_data[v_name]:
-                        if item_name in items:
-                            market_data[v_name][item_name]['price'] = int(market_data[v_name][item_name]['price'] * factor)
                 break
         
-        # 가격 변동성 추가 (랜덤 이벤트)
         if random.random() < 0.3:
-            vol_item = random.choice(list(market_data[player['pos']].keys()))
-            vol_direction = random.choice(["상승", "하락"])
-            vol_amount = random.randint(10, 30)
-            
-            if vol_direction == "상승":
-                market_data[player['pos']][vol_item]['price'] = int(market_data[player['pos']][vol_item]['price'] * (1 + vol_amount/100))
-                events.append(("volatility", f"📈 {vol_item} 가격 {vol_amount}% 급등!"))
-            else:
-                market_data[player['pos']][vol_item]['price'] = int(market_data[player['pos']][vol_item]['price'] * (1 - vol_amount/100))
-                events.append(("volatility", f"📉 {vol_item} 가격 {vol_amount}% 급락!"))
+            cities = list(market_data.keys())
+            if cities:
+                random_city = random.choice(cities)
+                items_in_city = list(market_data[random_city].keys())
+                if items_in_city:
+                    vol_item = random.choice(items_in_city)
+                    vol_direction = random.choice(["상승", "하락"])
+                    vol_amount = random.randint(10, 30)
+                    
+                    if vol_direction == "상승":
+                        market_data[random_city][vol_item]['price'] = int(market_data[random_city][vol_item]['price'] * (1 + vol_amount/100))
+                        events.append(("volatility", f"📈 {random_city}의 {vol_item} 가격 {vol_amount}% 급등!"))
+                    else:
+                        market_data[random_city][vol_item]['price'] = int(market_data[random_city][vol_item]['price'] * (1 - vol_amount/100))
+                        events.append(("volatility", f"📉 {random_city}의 {vol_item} 가격 {vol_amount}% 급락!"))
     
     return player, events
 
@@ -306,23 +299,22 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
                 if stock <= 0:
                     i_info['price'] = int(base * 10)
                 else:
+                    # 가격 계산 로직 수정: 재고가 많을수록 가격 하락
                     stock_ratio = stock / initial_stock
                     
-                    if stock_ratio > 2.0:
-                        price_factor = 0.5
-                    elif stock_ratio > 1.5:
-                        price_factor = 0.7
-                    elif stock_ratio > 1.0:
-                        price_factor = 0.9
-                    elif stock_ratio > 0.7:
-                        price_factor = 1.0
-                    elif stock_ratio > 0.4:
-                        price_factor = 1.3
-                    elif stock_ratio > 0.2:
-                        price_factor = 1.6
-                    else:
-                        price_factor = 2.0
+                    # 기본 가격 결정 (재고 비율에 따라)
+                    if stock_ratio > 1.5:  # 재고 과다
+                        price_factor = 0.6  # 40% 하락
+                    elif stock_ratio > 1.0:  # 재고 많음
+                        price_factor = 0.8  # 20% 하락
+                    elif stock_ratio > 0.7:  # 적정
+                        price_factor = 1.0  # 기준가
+                    elif stock_ratio > 0.4:  # 재고 부족
+                        price_factor = 1.3  # 30% 상승
+                    else:  # 재고 매우 부족
+                        price_factor = 1.8  # 80% 상승
                     
+                    # 지역별 특산물 가격 보정 (산지는 싸고, 소비지는 비쌈)
                     region_discounts = {
                         "부산": ["생선", "멸치", "굴비", "대구", "명태"],
                         "강원도": ["감자", "옥수수", "송이버섯"],
@@ -330,23 +322,27 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
                         "경상도": ["사과", "배", "소고기"],
                         "충청도": ["인삼", "약초"],
                         "제주도": ["감귤", "해산물", "돼지고기"],
-                        "한양": []
+                        "한양": []  # 수도는 모든 물가 비쌈
                     }
                     
+                    # 산지 보정 (산지에서는 30% 저렴)
                     for region, items in region_discounts.items():
                         if v_name == region and i_name in items:
-                            price_factor *= 0.8
+                            price_factor *= 0.7  # 산지는 30% 저렴
                             break
                     
+                    # 한양은 모든 물가 30% 비쌈
                     if v_name == "한양":
-                        price_factor *= 1.2
+                        price_factor *= 1.3
                     
-                    if v_name == "용병 고용소":
-                        price_factor = 1.0
+                    # 평양, 개성 등 주요 도시는 소비지이므로 비쌈
+                    if v_name in ["평양", "개성", "서울"] and i_name not in region_discounts.get(v_name, []):
+                        price_factor *= 1.2  # 소비지는 20% 비쌈
                     
                     i_info['price'] = int(base * price_factor)
                     
-                    min_price = int(base * 0.3)
+                    # 최소 가격 보장
+                    min_price = int(base * 0.4)
                     if i_info['price'] < min_price:
                         i_info['price'] = min_price
 
@@ -376,11 +372,14 @@ def calculate_max_purchase(player, items_info, market_data, pos, item_name, targ
     
     return min(max_by_money, max_by_weight, max_by_stock)
 
-def process_buy(player, items_info, market_data, pos, item_name, qty, progress_placeholder):
+def process_buy(player, items_info, market_data, pos, item_name, qty, progress_placeholder, log_key):
     total_bought = 0
     total_spent = 0
     trade_log = []
     batch_prices = []
+    
+    if log_key not in st.session_state.trade_logs:
+        st.session_state.trade_logs[log_key] = []
     
     while total_bought < qty:
         update_prices(st.session_state.settings, items_info, market_data, st.session_state.initial_stocks)
@@ -404,21 +403,26 @@ def process_buy(player, items_info, market_data, pos, item_name, qty, progress_p
             batch_prices.append(target['price'])
         
         avg_price = sum(batch_prices) // len(batch_prices)
-        trade_log.append(f"➤ {total_bought}/{qty} 구매 중... (체결가: {target['price']}냥 | 평균가: {avg_price}냥)")
+        log_msg = f"➤ {total_bought}/{qty} 구매 중... (체결가: {target['price']}냥 | 평균가: {avg_price}냥)"
+        trade_log.append(log_msg)
+        st.session_state.trade_logs[log_key].append(log_msg)
         
         with progress_placeholder.container():
-            for log in trade_log[-5:]:
+            for log in st.session_state.trade_logs[log_key][-10:]:
                 st.markdown(f"<div class='trade-line'>{log}</div>", unsafe_allow_html=True)
         
-        time.sleep(0.1)
+        time.sleep(0.05)
     
     return total_bought, total_spent, trade_log
 
-def process_sell(player, items_info, market_data, pos, item_name, qty, progress_placeholder):
+def process_sell(player, items_info, market_data, pos, item_name, qty, progress_placeholder, log_key):
     total_sold = 0
     total_earned = 0
     trade_log = []
     batch_prices = []
+    
+    if log_key not in st.session_state.trade_logs:
+        st.session_state.trade_logs[log_key] = []
     
     while total_sold < qty:
         update_prices(st.session_state.settings, items_info, market_data, st.session_state.initial_stocks)
@@ -438,13 +442,15 @@ def process_sell(player, items_info, market_data, pos, item_name, qty, progress_
             batch_prices.append(current_price)
         
         avg_price = sum(batch_prices) // len(batch_prices)
-        trade_log.append(f"➤ {total_sold}/{qty} 판매 중... (체결가: {current_price}냥 | 평균가: {avg_price}냥)")
+        log_msg = f"➤ {total_sold}/{qty} 판매 중... (체결가: {current_price}냥 | 평균가: {avg_price}냥)"
+        trade_log.append(log_msg)
+        st.session_state.trade_logs[log_key].append(log_msg)
         
         with progress_placeholder.container():
-            for log in trade_log[-5:]:
+            for log in st.session_state.trade_logs[log_key][-10:]:
                 st.markdown(f"<div class='trade-line'>{log}</div>", unsafe_allow_html=True)
         
-        time.sleep(0.1)
+        time.sleep(0.05)
     
     return total_sold, total_earned, trade_log
 
@@ -513,6 +519,7 @@ if doc:
                     st.session_state.villages = villages
                     st.session_state.initial_stocks = initial_stocks
                     st.session_state.last_time_update = time.time()
+                    st.session_state.trade_logs = {}
                     
                     market_data = {}
                     for v_name, v_data in villages.items():
@@ -612,13 +619,13 @@ if doc:
                         d = market_data[player['pos']][item_name]
                         base_price = items_info[item_name]['base']
                         
-                        if d['price'] > base_price * 1.1:
+                        if d['price'] > base_price * 1.2:
                             price_class = "price-up"
                             trend = "▲▲"
                         elif d['price'] > base_price:
                             price_class = "price-up"
                             trend = "▲"
-                        elif d['price'] < base_price * 0.9:
+                        elif d['price'] < base_price * 0.8:
                             price_class = "price-down"
                             trend = "▼▼"
                         elif d['price'] < base_price:
@@ -646,8 +653,12 @@ if doc:
                             max_ph.write(f"⚡ {max_buy}개")
                             
                             col_a, col_b, col_c = st.columns([2,1,1])
-                            qty = col_a.text_input("수량", value="1", key=f"qty_{item_name}", label_visibility="collapsed")
                             
+                            # 이전에 입력한 값이 있으면 불러오기
+                            default_qty = st.session_state.last_qty.get(f"{player['pos']}_{item_name}", "1")
+                            qty = col_a.text_input("수량", value=default_qty, key=f"qty_{item_name}", label_visibility="collapsed")
+                            
+                            log_key = f"{player['pos']}_{item_name}_{time.time()}"
                             progress_ph = st.empty()
                             
                             if col_b.button("💰 매수", key=f"buy_{item_name}", use_container_width=True):
@@ -656,11 +667,19 @@ if doc:
                                     if qty_int > 0:
                                         actual_qty = min(qty_int, max_buy)
                                         if actual_qty > 0:
+                                            # 입력값 저장
+                                            st.session_state.last_qty[f"{player['pos']}_{item_name}"] = "1"
+                                            
+                                            # 해당 아이템의 이전 로그 삭제
+                                            for key in list(st.session_state.trade_logs.keys()):
+                                                if key.startswith(f"{player['pos']}_{item_name}"):
+                                                    del st.session_state.trade_logs[key]
+                                            
                                             progress_ph.markdown("<div class='trade-progress'></div>", unsafe_allow_html=True)
                                             
                                             bought, spent, trade_log = process_buy(
                                                 player, items_info, market_data,
-                                                player['pos'], item_name, actual_qty, progress_ph
+                                                player['pos'], item_name, actual_qty, progress_ph, log_key
                                             )
                                             
                                             if bought > 0:
@@ -683,6 +702,11 @@ if doc:
                                                 
                                                 avg_price = spent // bought
                                                 st.markdown(f"<div class='trade-complete'>✅ 총 {bought}개 매수 완료! (총 {spent:,}냥 | 평균가: {avg_price}냥)</div>", unsafe_allow_html=True)
+                                                
+                                                # 2초 후 로그 삭제
+                                                time.sleep(2)
+                                                if log_key in st.session_state.trade_logs:
+                                                    del st.session_state.trade_logs[log_key]
                                                 st.rerun()
                                             else:
                                                 st.error("❌ 구매 실패")
@@ -700,11 +724,19 @@ if doc:
                                         max_sell = player['inv'].get(item_name, 0)
                                         actual_qty = min(qty_int, max_sell)
                                         if actual_qty > 0:
+                                            # 입력값 저장
+                                            st.session_state.last_qty[f"{player['pos']}_{item_name}"] = "1"
+                                            
+                                            # 해당 아이템의 이전 로그 삭제
+                                            for key in list(st.session_state.trade_logs.keys()):
+                                                if key.startswith(f"{player['pos']}_{item_name}"):
+                                                    del st.session_state.trade_logs[key]
+                                            
                                             progress_ph.markdown("<div class='trade-progress'></div>", unsafe_allow_html=True)
                                             
                                             sold, earned, trade_log = process_sell(
                                                 player, items_info, market_data,
-                                                player['pos'], item_name, actual_qty, progress_ph
+                                                player['pos'], item_name, actual_qty, progress_ph, log_key
                                             )
                                             
                                             if sold > 0:
@@ -727,6 +759,11 @@ if doc:
                                                 
                                                 avg_price = earned // sold
                                                 st.markdown(f"<div class='trade-complete'>✅ 총 {sold}개 매도 완료! (총 {earned:,}냥 | 평균가: {avg_price}냥)</div>", unsafe_allow_html=True)
+                                                
+                                                # 2초 후 로그 삭제
+                                                time.sleep(2)
+                                                if log_key in st.session_state.trade_logs:
+                                                    del st.session_state.trade_logs[log_key]
                                                 st.rerun()
                                             else:
                                                 st.error("❌ 판매 실패")
