@@ -268,7 +268,7 @@ def update_game_time(player, settings, market_data, initial_stocks):
         
         # ... 나머지 코드 ...
     
-    return player, events
+        return player, events
         
         if old_month != player['month'] or old_year != player['year']:
             events.append(("month", f"🌙 {player['year']}년 {player['month']}월이 시작되었습니다!"))
@@ -987,6 +987,7 @@ if doc:
         # 0.5초마다 자동 새로고침
         time.sleep(0.5)
         st.rerun()
+
 
 
 
