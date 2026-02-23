@@ -835,35 +835,42 @@ if doc:
         with tab3:
             st.subheader("⚔️ 내 용병")
             if player['mercs']:
+                # settings에서 해고 환불 비율 가져오기
+                fire_refund_rate = settings.get('fire_refund_rate', 0.7)
+                
                 total_bonus = 0
+                
+                # 용병 목록을 딕셔너리로 변환하여 카운트
+                merc_count = {}
                 for merc in player['mercs']:
+                    merc_count[merc] = merc_count.get(merc, 0) + 1
+                
+                for merc, count in merc_count.items():
                     if merc in merc_data:
                         bonus = merc_data[merc]['w_bonus']
-                        total_bonus += bonus
-                        st.write(f"• **{merc}** (무게 +{bonus}근)")
+                        refund = int(merc_data[merc]['price'] * fire_refund_rate)
+                        total_bonus += bonus * count
+                        
+                        col1, col2, col3, col4 = st.columns([2,1,1,1])
+                        col1.write(f"• **{merc}**")
+                        col2.write(f"{count}명")
+                        col3.write(f"무게 +{bonus * count}근")
+                        
+                        # 해고 버튼
+                        if col4.button(f"❌ 해고", key=f"fire_{merc}", use_container_width=True):
+                            # 해당 용병 1명 제거
+                            for i, m in enumerate(player['mercs']):
+                                if m == merc:
+                                    player['mercs'].pop(i)
+                                    player['money'] += refund
+                                    break
+                            st.success(f"✅ {merc} 1명 해고 완료! ({refund:,}냥 환불)")
+                            st.rerun()
                 
                 st.info(f"⚖️ 총 무게 보너스: +{total_bonus}근")
+                st.caption(f"💰 해고 시 {int(fire_refund_rate*100)}% 환불")
             else:
                 st.write("고용한 용병이 없습니다")
-        
-        with tab4:
-            st.subheader("📊 거래 통계")
-            stats = st.session_state.stats
-            
-            col1, col2 = st.columns(2)
-            col1.metric("총 구매", f"{stats['total_bought']}개")
-            col2.metric("총 판매", f"{stats['total_sold']}개")
-            
-            col3, col4 = st.columns(2)
-            col3.metric("총 지출", f"{stats['total_spent']:,}냥")
-            col4.metric("총 수익", f"{stats['total_earned']:,}냥")
-            
-            if stats['total_spent'] > 0:
-                profit = stats['total_earned'] - stats['total_spent']
-                profit_rate = (profit / stats['total_spent']) * 100
-                st.metric("순이익", f"{profit:+,}냥", f"{profit_rate:+.1f}%")
-            
-            st.metric("거래 횟수", f"{stats['trade_count']}회")
         
         with tab5:
             st.subheader("⚙️ 게임 메뉴")
@@ -933,6 +940,7 @@ if doc:
         # 0.5초마다 자동 새로고침
         time.sleep(0.5)
         st.rerun()
+
 
 
 
