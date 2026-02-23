@@ -974,7 +974,10 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
-
+        
+        # 0.5초마다 자동 새로고침
+        time.sleep(0.5)
+        st.rerun()
 
 
 
