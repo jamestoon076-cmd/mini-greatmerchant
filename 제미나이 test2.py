@@ -106,7 +106,7 @@ def load_game_data():
                     'w_bonus': int(r.get('weight_bonus', 0))
                 }
         
-                # 마을 데이터 로드
+        # 마을 데이터 로드
         vil_ws = doc.worksheet("Village_Data")
         vil_vals = vil_ws.get_all_values()
         headers = [h.strip() for h in vil_vals[0]]
@@ -962,6 +962,7 @@ if doc:
         # 0.5초마다 자동 새로고침 (시간 실시간 업데이트)
         time.sleep(0.5)
         st.rerun()
+
 
 
 
