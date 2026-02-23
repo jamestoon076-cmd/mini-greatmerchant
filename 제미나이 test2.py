@@ -584,7 +584,6 @@ if doc:
         tab1, tab2, tab3, tab4, tab5 = st.tabs(["🛒 거래", "📦 인벤토리", "⚔️ 용병", "📊 통계", "⚙️ 기타"])
         
         # [탭1] 거래
-        # [탭1] 거래
         with tab1:
             if player['pos'] == "용병 고용소":
                 st.subheader("⚔️ 용병 고용")
@@ -805,9 +804,7 @@ if doc:
             
             st.metric("거래 횟수", f"{stats['trade_count']}회")
         
-        # [탭5] 기타
-       # [탭5] 기타 부분의 마을 이동 코드 수정 (약 900번 라인 근처)
-with tab5:
+        with tab5:
     st.subheader("⚙️ 게임 메뉴")
     
     # 마을 이동
@@ -832,28 +829,24 @@ with tab5:
                 dest, cost = move_dict[selected]
                 if player['money'] >= cost:
                     player['money'] -= cost
-                    
-                    # 🔴 중요: 떠나는 도시의 재고를 초기화하지 않음 (그대로 유지)
-                    # 대신 도착할 도시의 재고는 초기 상태로 리셋?
-                    # 또는 현재 상태 유지?
-                    
-                    # 방법 1: 도착 도시 재고를 초기 상태로 리셋 (게임처럼)
-                    if dest in st.session_state.initial_stocks:
-                        for item_name in market_data[dest]:
-                            if item_name in st.session_state.initial_stocks[dest]:
-                                market_data[dest][item_name]['stock'] = st.session_state.initial_stocks[dest][item_name]
-                    
                     player['pos'] = dest
                     money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
-                    st.success(f"✅ {dest}로 이동했습니다! (도착지 재고 초기화)")
+                    st.success(f"✅ {dest}로 이동했습니다!")
                     st.rerun()
                 else:
                     st.error("❌ 잔액 부족")
         else:
             st.write("이동 가능한 마을이 없습니다")
-            
-            # 시간 정보
-
-
+    
+    st.divider()
+    
+    # 시간 정보
+    st.write("**⏰ 시간 시스템**")
+    remaining = 180 - int(time.time() - st.session_state.last_time_update)
+    if remaining < 0:
+        remaining = 0
+    st.info(f"현실 3분 = 게임 1달\n\n다음 달까지: {remaining}초")
+    
+    st.divider()
 
 
