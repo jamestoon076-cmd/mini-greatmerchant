@@ -73,6 +73,121 @@ def connect_gsheet():
         return None
 
 # --- 3. 데이터 로드 함수 ---
+@st.cache_data(ttl=10)
+def load_game_data():
+    doc = connect_gsheet()
+    if not doc:
+        return None, None, None, None, None, None, None
+    
+    try:
+        # 설정 데이터 로드
+        set_ws = doc.worksheet("Setting_Data")
+        settings = {r['변수명']: float(r['값']) for r in set_ws.get_all_records()}
+        
+        # 아이템 정보 로드
+        item_ws = doc.worksheet("Item_Data")
+        items_info = {}
+        for r in item_ws.get_all_records():
+            if r.get('item_name'):
+                name = str(r['item_name']).strip()
+                items_info[name] = {
+                    'base': int(r['base_price']),
+                    'w': int(r['weight'])
+                }
+        
+        # 용병 정보 로드
+        bal_ws = doc.worksheet("Balance_Data")
+        merc_data = {}
+        for r in bal_ws.get_all_records():
+            if r.get('name'):
+                name = str(r['name']).strip()
+                merc_data[name] = {
+                    'price': int(r['price']),
+                    'w_bonus': int(r.get('weight_bonus', 0))
+                }
+        
+        # 마을 데이터 로드
+        vil_ws = doc.worksheet("Village_Data")
+        vil_vals = vil_ws.get_all_values()
+        headers = [h.strip() for h in vil_vals[0]]
+        
+        villages = {}
+        initial_stocks = {}
+        
+        for row in vil_vals[1:]:
+            if not row or not row[0].strip():
+                continue
+            v_name = row[0].strip()
+            if v_name in villages:
+                continue
+                
+            try:
+                x = int(row[1]) if len(row) > 1 and row[1] else 0
+                y = int(row[2]) if len(row) > 2 and row[2] else 0
+            except:
+                x, y = 0, 0
+            
+            villages[v_name] = {'items': {}, 'x': x, 'y': y}
+            initial_stocks[v_name] = {}
+            
+            if v_name != "용병 고용소":
+                for i in range(3, len(headers)):
+                    if headers[i] in items_info:
+                        if len(row) > i and row[i].strip():
+                            try:
+                                stock = int(row[i])
+                                villages[v_name]['items'][headers[i]] = stock
+                                initial_stocks[v_name][headers[i]] = stock
+                            except:
+                                pass
+        
+        # 플레이어 데이터 로드
+        play_ws = doc.worksheet("Player_Data")
+        slots = []
+        for r in play_ws.get_all_records():
+            if str(r.get('slot', '')).strip():
+                slots.append({
+                    'slot': int(r['slot']),
+                    'money': int(r.get('money', 0)),
+                    'pos': str(r.get('pos', '한양')),
+                    'inv': json.loads(r.get('inventory', '{}')) if r.get('inventory') else {},
+                    'mercs': json.loads(r.get('mercs', '[]')) if r.get('mercs') else [],
+                    'week': int(r.get('week', 1)),
+                    'month': int(r.get('month', 1)),
+                    'year': int(r.get('year', 1592)),
+                    'last_save': r.get('last_save', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+                })
+        
+        # 도시별 설정 데이터 로드
+        city_settings = {}
+        try:
+            city_ws = doc.worksheet("City_Setting_Data")
+            for r in city_ws.get_all_records():
+                city_name = str(r['village_name']).strip()
+                city_settings[city_name] = {
+                    'ratio_extreme_high': float(r.get('ratio_extreme_high', 2.0)),
+                    'ratio_high': float(r.get('ratio_high', 1.5)),
+                    'ratio_above_normal': float(r.get('ratio_above_normal', 1.0)),
+                    'ratio_normal': float(r.get('ratio_normal', 0.7)),
+                    'ratio_low': float(r.get('ratio_low', 0.4)),
+                    'factor_extreme_high': float(r.get('factor_extreme_high', 0.5)),
+                    'factor_high': float(r.get('factor_high', 0.7)),
+                    'factor_above_normal': float(r.get('factor_above_normal', 0.85)),
+                    'factor_normal': float(r.get('factor_normal', 1.0)),
+                    'factor_low': float(r.get('factor_low', 1.3)),
+                    'factor_extreme_low': float(r.get('factor_extreme_low', 2.0)),
+                    'region_discount': float(r.get('region_discount', 1.0)),
+                    'city_premium': float(r.get('city_premium', 1.0)),
+                }
+        except Exception as e:
+            st.warning("City_Setting_Data 시트를 찾을 수 없습니다. 기본값을 사용합니다.")
+            city_settings = {}
+        
+        return settings, items_info, merc_data, villages, initial_stocks, slots, city_settings
+    
+    except Exception as e:
+        st.error(f"❌ 데이터 로드 에러: {e}")
+        return None, None, None, None, None, None, None
 
 # --- 4. 세션 초기화 함수 ---
 def init_session_state():
@@ -843,6 +958,7 @@ if doc:
         # 0.5초마다 자동 새로고침 (시간 실시간 업데이트)
         time.sleep(0.5)
         st.rerun()
+
 
 
 
