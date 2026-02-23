@@ -785,5 +785,3 @@ if doc:
                 st.write("고용한 용병이 없습니다")
         
         # [탭4] 통계
-        with tab4:
-            st.subheader("
