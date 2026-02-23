@@ -69,7 +69,7 @@ def load_game_data():
                 }
         
         # 마을 데이터 로드
-        vil_ws = doc.worksheet("Village_Data")
+        vil_ws = doc.worksheet("Korea_Village_Data")
         vil_vals = vil_ws.get_all_values()
         headers = [h.strip() for h in vil_vals[0]]
         
@@ -328,3 +328,4 @@ if doc:
                     st.success("✅ 저장 완료!")
                 except Exception as e:
                     st.error(f"❌ 저장 실패: {e}")
+
