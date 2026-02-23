@@ -300,11 +300,9 @@ def get_time_display(player):
     return f"{player['year']}년 {month_names[player['month']-1]} {player['week']}주차"
 
 # --- 6. 게임 로직 함수들 ---
-def update_prices(settings, items_info, market_data, initial_stocks=None, city_settings=None):
+def update_prices(settings, items_info, market_data, initial_stocks=None):
     if initial_stocks is None:
         initial_stocks = st.session_state.get('initial_stocks', {})
-    if city_settings is None:
-        city_settings = st.session_state.get('city_settings', {})
     
     # 기본 설정값
     default_ratio_extreme_high = settings.get('price_ratio_extreme_high', 2.0)
@@ -571,7 +569,7 @@ if doc:
                 st.session_state.events = events
             st.session_state.last_update = current_time
         
-        update_prices(settings, items_info, market_data, initial_stocks, st.session_state.city_settings)
+        update_prices(settings, items_info, market_data, initial_stocks)
         cw, tw = get_weight(player, items_info, merc_data)
         
         if st.session_state.events:
@@ -930,6 +928,7 @@ if doc:
         # 0.5초마다 자동 새로고침
         time.sleep(0.5)
         st.rerun()
+
 
 
 
