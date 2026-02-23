@@ -467,6 +467,8 @@ if doc:
                     st.session_state.merc_data = merc_data
                     st.session_state.villages = villages
                     st.session_state.initial_stocks = initial_stocks
+                    # ✅ 여기에 city_settings 저장 추가
+                    st.session_state.city_settings = city_settings
                     st.session_state.last_time_update = time.time()
                     st.session_state.trade_logs = {}
                     
@@ -502,7 +504,7 @@ if doc:
                 st.session_state.events = events
             st.session_state.last_update = current_time
         
-        update_prices(settings, items_info, market_data, initial_stocks)
+        update_prices(settings, items_info, market_data, initial_stocks, st.session_state.city_settings)
         cw, tw = get_weight(player, items_info, merc_data)
         
         if st.session_state.events:
@@ -841,6 +843,7 @@ if doc:
         # 0.5초마다 자동 새로고침 (시간 실시간 업데이트)
         time.sleep(0.5)
         st.rerun()
+
 
 
 
