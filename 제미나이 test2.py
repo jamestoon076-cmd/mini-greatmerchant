@@ -643,7 +643,7 @@ if doc:
                             col_a, col_b, col_c = st.columns([2,1,1])
                             
                             default_qty = st.session_state.last_qty.get(f"{player['pos']}_{item_name}", "1")
-                            qty = col_a.text_input("수량", value=default_qty, key=f"qty_{item_name}", label_visibility="collapsed")
+                            qty = col_a.text_input("수량", value=default_qty, key=f"qty_{player['pos']}_{item_name}", label_visibility="collapsed")
                             
                             # 진행상황 표시 영역 - 항상 최근 로그 표시
                             progress_ph = st.empty()
@@ -863,3 +863,4 @@ if doc:
         # 0.5초마다 자동 새로고침 (시간 실시간 업데이트)
         time.sleep(0.5)
         st.rerun()
+
