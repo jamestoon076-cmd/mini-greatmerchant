@@ -138,7 +138,7 @@ def load_game_data():
                     if headers[i] in items_info:
                         if len(row) > i and row[i].strip():
                             try:
-                                stock = int(row[i])
+                                stock = int(row[i])  # ✅ 이 부분은 이미 int 변환하고 있음
                                 villages[v_name]['items'][headers[i]] = stock
                                 initial_stocks[v_name][headers[i]] = stock
                             except:
@@ -336,14 +336,19 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
         for i_name, i_info in v_data.items():
             if i_name in items_info:
                 base = items_info[i_name]['base']
-                stock = i_info['stock']
-                initial_stock = initial_stocks.get(v_name, {}).get(i_name, 100)
-                
-                # 디버깅: 실제 초기재고 값 확인
-                print(f"🔍 {v_name} {i_name}: 현재재고={stock}, 초기재고={initial_stock}")
-                
-                if initial_stock <= 0:
-                    initial_stock = 100
+                    stock = i_info['stock']
+                        # 🔥 강제로 숫자로 변환
+                        try:
+                            stock = int(stock)
+                        except:
+                            stock = 0
+                            
+                        initial_stock = initial_stocks.get(v_name, {}).get(i_name, 100)
+                        # 🔥 강제로 숫자로 변환
+                        try:
+                            initial_stock = int(initial_stock)
+                        except:
+                            initial_stock = 100
                 
                 if stock <= 0:
                     i_info['price'] = int(base * max_price_rate)
@@ -961,6 +966,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
