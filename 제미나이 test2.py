@@ -73,95 +73,7 @@ def connect_gsheet():
         return None
 
 # --- 3. 데이터 로드 함수 ---
-@st.cache_data(ttl=10)
-def load_game_data():
-    doc = connect_gsheet()
-    if not doc:
-        return None, None, None, None, None, None
-    
-    try:
-        set_ws = doc.worksheet("Setting_Data")
-        settings = {r['변수명']: float(r['값']) for r in set_ws.get_all_records()}
-        
-        item_ws = doc.worksheet("Item_Data")
-        items_info = {}
-        for r in item_ws.get_all_records():
-            if r.get('item_name'):
-                name = str(r['item_name']).strip()
-                items_info[name] = {
-                    'base': int(r['base_price']),
-                    'w': int(r['weight'])
-                }
-        
-        bal_ws = doc.worksheet("Balance_Data")
-        merc_data = {}
-        for r in bal_ws.get_all_records():
-            if r.get('name'):
-                name = str(r['name']).strip()
-                merc_data[name] = {
-                    'price': int(r['price']),
-                    'w_bonus': int(r.get('weight_bonus', 0))
-                }
-        
-        # 마을 데이터 로드 부분 수정
-        vil_ws = doc.worksheet("Village_Data")
-        vil_vals = vil_ws.get_all_values()
-        headers = [h.strip() for h in vil_vals[0]]
-        
-        villages = {}
-        initial_stocks = {}
-        
-        for row in vil_vals[1:]:
-            if not row or not row[0].strip():
-                continue
-            v_name = row[0].strip()
-            
-            # 이미 존재하는 마을이면 스킵 (중복 제거)
-            if v_name in villages:
-                continue
-                
-            try:
-                x = int(row[1]) if len(row) > 1 and row[1] else 0
-                y = int(row[2]) if len(row) > 2 and row[2] else 0
-            except:
-                x, y = 0, 0
-            
-            villages[v_name] = {'items': {}, 'x': x, 'y': y}
-            initial_stocks[v_name] = {}
-            
-            if v_name != "용병 고용소":
-                for i in range(3, len(headers)):
-                    if headers[i] in items_info:
-                        if len(row) > i and row[i].strip():
-                            try:
-                                stock = int(row[i])
-                                villages[v_name]['items'][headers[i]] = stock
-                                initial_stocks[v_name][headers[i]] = stock
-                            except:
-                                pass
-        
-        play_ws = doc.worksheet("Player_Data")
-        slots = []
-        for r in play_ws.get_all_records():
-            if str(r.get('slot', '')).strip():
-                slots.append({
-                    'slot': int(r['slot']),
-                    'money': int(r.get('money', 0)),
-                    'pos': str(r.get('pos', '한양')),
-                    'inv': json.loads(r.get('inventory', '{}')) if r.get('inventory') else {},
-                    'mercs': json.loads(r.get('mercs', '[]')) if r.get('mercs') else [],
-                    'week': int(r.get('week', 1)),
-                    'month': int(r.get('month', 1)),
-                    'year': int(r.get('year', 1592)),
-                    'last_save': r.get('last_save', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-                })
-        
-        return settings, items_info, merc_data, villages, initial_stocks, slots
-    
-    except Exception as e:
-        st.error(f"❌ 데이터 로드 에러: {e}")
-        return None, None, None, None, None, None
-
+코드를 변경해야할거 아님
 # --- 4. 세션 초기화 함수 ---
 def init_session_state():
     if 'game_started' not in st.session_state:
@@ -288,38 +200,49 @@ def get_time_display(player):
     return f"{player['year']}년 {month_names[player['month']-1]} {player['week']}주차"
 
 # --- 6. 게임 로직 함수들 ---
-def update_prices(settings, items_info, market_data, initial_stocks=None):
+def update_prices(settings, items_info, market_data, initial_stocks=None, city_settings=None):
     if initial_stocks is None:
         initial_stocks = st.session_state.get('initial_stocks', {})
+    if city_settings is None:
+        city_settings = st.session_state.get('city_settings', {})
     
-    # settings에서 모든 값 가져오기 (기본값 설정)
-    volatility = settings.get('volatility', 500)
+    # 기본 설정값
+    default_ratio_extreme_high = settings.get('price_ratio_extreme_high', 2.0)
+    default_ratio_high = settings.get('price_ratio_high', 1.5)
+    default_ratio_above_normal = settings.get('price_ratio_above_normal', 1.0)
+    default_ratio_normal = settings.get('price_ratio_normal', 0.7)
+    default_ratio_low = settings.get('price_ratio_low', 0.4)
     
-    # 재고 비율 기준값
-    ratio_extreme_high = settings.get('price_ratio_extreme_high', 2.0)
-    ratio_high = settings.get('price_ratio_high', 1.5)
-    ratio_above_normal = settings.get('price_ratio_above_normal', 1.0)
-    ratio_normal = settings.get('price_ratio_normal', 0.7)
-    ratio_low = settings.get('price_ratio_low', 0.4)
+    default_factor_extreme_high = settings.get('price_factor_extreme_high', 0.5)
+    default_factor_high = settings.get('price_factor_high', 0.7)
+    default_factor_above_normal = settings.get('price_factor_above_normal', 0.85)
+    default_factor_normal = settings.get('price_factor_normal', 1.0)
+    default_factor_low = settings.get('price_factor_low', 1.3)
+    default_factor_extreme_low = settings.get('price_factor_extreme_low', 2.0)
     
-    # 가격 계수
-    factor_extreme_high = settings.get('price_factor_extreme_high', 0.5)
-    factor_high = settings.get('price_factor_high', 0.7)
-    factor_above_normal = settings.get('price_factor_above_normal', 0.85)
-    factor_normal = settings.get('price_factor_normal', 1.0)
-    factor_low = settings.get('price_factor_low', 1.3)
-    factor_extreme_low = settings.get('price_factor_extreme_low', 2.0)
-    
-    # 지역별 가격 보정 계수
-    region_discount = settings.get('region_discount_rate', 0.7)
-    capital_premium = settings.get('capital_premium_rate', 1.3)
-    city_premium = settings.get('city_premium_rate', 1.2)
-    
-    # 최소/최대 가격 비율
     min_price_rate = settings.get('min_price_rate', 0.4)
     max_price_rate = settings.get('max_price_rate', 3.0)
     
     for v_name, v_data in market_data.items():
+        # 도시별 설정 가져오기
+        city_set = city_settings.get(v_name, {})
+        
+        ratio_extreme_high = city_set.get('ratio_extreme_high', default_ratio_extreme_high)
+        ratio_high = city_set.get('ratio_high', default_ratio_high)
+        ratio_above_normal = city_set.get('ratio_above_normal', default_ratio_above_normal)
+        ratio_normal = city_set.get('ratio_normal', default_ratio_normal)
+        ratio_low = city_set.get('ratio_low', default_ratio_low)
+        
+        factor_extreme_high = city_set.get('factor_extreme_high', default_factor_extreme_high)
+        factor_high = city_set.get('factor_high', default_factor_high)
+        factor_above_normal = city_set.get('factor_above_normal', default_factor_above_normal)
+        factor_normal = city_set.get('factor_normal', default_factor_normal)
+        factor_low = city_set.get('factor_low', default_factor_low)
+        factor_extreme_low = city_set.get('factor_extreme_low', default_factor_extreme_low)
+        
+        region_discount = city_set.get('region_discount', 1.0)
+        city_premium = city_set.get('city_premium', 1.0)
+        
         for i_name, i_info in v_data.items():
             if i_name in items_info:
                 base = items_info[i_name]['base']
@@ -332,10 +255,9 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
                 if stock <= 0:
                     i_info['price'] = int(base * max_price_rate)
                 else:
-                    # 재고 비율 계산
                     stock_ratio = stock / initial_stock
                     
-                    # 재고 비율에 따른 가격 계수 결정
+                    # 도시별 기준값으로 가격 계수 결정
                     if stock_ratio > ratio_extreme_high:
                         price_factor = factor_extreme_high
                     elif stock_ratio > ratio_high:
@@ -349,39 +271,33 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
                     else:
                         price_factor = factor_extreme_low
                     
-                    # 지역별 특산물 가격 보정
+                    # 지역 특산물 할인
                     region_discounts = {
                         "부산": ["생선", "멸치", "굴비", "대구", "명태"],
+                        "제주": ["감귤", "해산물", "돼지고기"],
                         "강원도": ["감자", "옥수수", "송이버섯"],
                         "전라도": ["쌀", "배추", "고추"],
                         "경상도": ["사과", "배", "소고기"],
                         "충청도": ["인삼", "약초"],
-                        "제주도": ["감귤", "해산물", "돼지고기"],
+                        "함흥": ["북어", "명태"],
                     }
                     
-                    # 산지 보정
                     for region, items in region_discounts.items():
                         if v_name == region and i_name in items:
                             price_factor *= region_discount
                             break
                     
-                    # 한양 보정
-                    if v_name == "한양":
-                        price_factor *= capital_premium
-                    
-                    # 주요 도시 보정
-                    if v_name in ["평양", "개성", "서울"]:
-                        price_factor *= city_premium
+                    # 도시 프리미엄 적용
+                    price_factor *= city_premium
                     
                     i_info['price'] = int(base * price_factor)
                     
                     # 최소/최대 가격 제한
                     min_price = int(base * min_price_rate)
-                    max_price = int(base * max_price_rate)
                     if i_info['price'] < min_price:
                         i_info['price'] = min_price
-                    if i_info['price'] > max_price:
-                        i_info['price'] = max_price
+                    if i_info['price'] > base * max_price_rate:
+                        i_info['price'] = int(base * max_price_rate)
 
 def get_weight(player, items_info, merc_data):
     cw = 0
@@ -925,6 +841,7 @@ if doc:
         # 0.5초마다 자동 새로고침 (시간 실시간 업데이트)
         time.sleep(0.5)
         st.rerun()
+
 
 
 
