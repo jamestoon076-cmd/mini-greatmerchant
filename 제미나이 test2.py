@@ -5,162 +5,130 @@ import json
 import math
 import time
 from datetime import datetime
-import hashlib
-import uuid
-import random
 
-# --- 1. 페이지 설정 (최상단) ---
-st.set_page_config(page_title="조선거상 미니", page_icon="🏯", layout="centered")
-
-# --- 2. [필독] 세션 상태 초기화 (AttributeError 방지) ---
+# --- 1. 세션 초기화 (AttributeError 방지 최우선) ---
 if 'game_started' not in st.session_state:
     st.session_state.game_started = False
-if 'player' not in st.session_state:
-    st.session_state.player = None
 
-# --- 3. 데이터 로드 함수 (사용자 원본 gspread 로직 유지) ---
-@st.cache_resource
-def load_game_data():
-    try:
-        # 서비스 계정 키를 이용한 gspread 인증 (st.secrets["gspread"] 필요)
-        creds = Credentials.from_service_account_info(st.secrets["gspread"], 
-            scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
-        client = gspread.authorize(creds)
-        doc = client.open("조선거상_DB")
-        
-        # 1. 설정 데이터 (변동성, 환불비율 등)
-        settings = {r['변수명']: float(r['값']) for r in doc.worksheet("Setting_Data").get_all_records() if r.get('변수명')}
-        
-        # 2. 아이템 정보 (기본가, 무게)
-        items_info = {r['item_name']: {'base': int(r['base_price']), 'w': int(r['weight'])} for r in doc.worksheet("Item_Data").get_all_records()}
-        
-        # 3. 용병 정보 (가격, 무게 보너스)
-        mercs_data = {r['name']: {'price': int(r['price']), 'weight_bonus': int(r['weight_bonus'])} for r in doc.worksheet("Balance_Data").get_all_records()}
-        
-        # 4. 마을 재고 데이터 (국가별 시트 통합)
-        market_data = {}
-        for ws in doc.worksheets():
-            if "_Village_Data" in ws.title:
-                city_list = ws.get_all_records()
-                for city_row in city_list:
-                    city_name = city_row.pop('village_name')
-                    market_data[city_name] = {item: {'stock': int(stock) if stock != "" else 0} for item, stock in city_row.items()}
-        
-        player_slots = doc.worksheet("Player_Data").get_all_records()
-        return doc, settings, items_info, mercs_data, market_data, player_slots
-    except Exception as e:
-        st.error(f"데이터 로드 실패: {e}")
-        return None
-
-# --- 4. 가격 변동 계산 함수 (Setting_Data의 volatility 반영) ---
-def get_price(item_name, city, items_info, market_data, settings):
+# --- 2. [핵심] 시트의 Setting_Data를 활용한 가격 변동 수식 ---
+def get_dynamic_price(item_name, city, items_info, market_data, settings, initial_stocks):
+    """Setting_Data의 volatility(5000)를 수식에 직접 반영"""
     base = items_info[item_name]['base']
     stock = market_data[city][item_name]['stock']
-    vol = settings.get('volatility', 5000) / 1000 # 5000 -> 5.0
     
-    if stock <= 0: return base * 5 # 재고 없으면 5배 폭등
+    # 📌 시트의 volatility (5000) 반영
+    vol = settings.get('volatility', 5000) / 1000  # 5000 -> 5.0
+    init_s = initial_stocks.get(city, {}).get(item_name, 100)
     
-    # [수식] (100 / 현재재고) ^ (변동성 / 4) -> 재고가 100보다 적으면 가격 상승
-    ratio = 100 / stock
+    if stock <= 0: return base * 5
+    
+    # [수식] (초기재고 / 현재재고) ^ (변동성 / 4)
+    # 재고가 줄어들수록 가격이 지수함수적으로 상승
+    ratio = init_s / stock
     factor = math.pow(ratio, (vol / 4))
     
-    # Setting_Data의 min/max_price_rate 적용
-    factor = max(settings.get('min_price_rate', 0.4), min(settings.get('max_price_rate', 3.0), factor))
-    return int(base * factor)
-
-# --- 5. 게임 메인 로직 ---
-data = load_game_data()
-
-if data:
-    doc, settings, items_info, mercs_data, market_data, player_slots = data
+    # Setting_Data의 min/max_price_rate 적용 (기본값 0.4~3.0)
+    min_r = settings.get('min_price_rate', 0.4)
+    max_r = settings.get('max_price_rate', 3.0)
+    final_factor = max(min_r, min(max_r, factor))
     
-    if not st.session_state.game_started:
-        # [슬롯 선택 화면]
-        st.title("🏯 조선거상 미니")
-        for i, p in enumerate(player_slots):
-            with st.container(border=True):
-                st.write(f"💾 **슬롯 {i+1}** | 📍 {p.get('pos','한양')} | 💰 {int(p.get('money',0)):,}냥")
-                if st.button(f"슬롯 {i+1} 시작", key=f"slot_{i}"):
-                    st.session_state.player = {
-                        'money': int(p.get('money', 10000)),
-                        'pos': p.get('pos', '한양'),
-                        'inventory': json.loads(p['inventory']) if p.get('inventory') else {},
-                        'mercs': json.loads(p['mercs']) if p.get('mercs') else [],
-                        'start_time': time.time()
-                    }
-                    st.session_state.game_started = True
-                    st.rerun()
-    else:
-        player = st.session_state.player
+    return int(base * final_factor)
+
+# --- 3. 매매 실행 함수 (100개씩 루프 돌며 실시간 시세/무게 체크) ---
+def execute_trade_loop(mode, item_name, target_amt, player, market_data, city, items_info, settings, initial_stocks):
+    log_placeholder = st.empty()
+    logs = []
+    unit_w = items_info[item_name]['w']
+    step = 100
+    completed = 0
+    
+    while completed < target_amt:
+        batch = min(step, target_amt - completed)
         
-        # [실시간 무게 계산]
-        max_w = 200 + sum([mercs_data.get(m, {'weight_bonus':0})['weight_bonus'] for m in player['mercs']])
-        curr_w = sum([items_info[it]['w'] * qty for it, qty in player['inventory'].items() if it in items_info])
+        # 📌 매 루프마다 용병 보너스 포함된 실시간 최대 무게 계산
+        max_w = 200 + sum([st.session_state.merc_data[m]['w_bonus'] for m in player['mercs']])
+        curr_w = sum([items_info[it]['w'] * qty for it, qty in player['inv'].items() if it in items_info])
         
-        # 상단 정보 바
-        st.info(f"💰 {player['money']:,}냥 | 📦 {curr_w}/{max_w}근 | ⏰ {30 - int(time.time() - player['start_time']) % 30}초 후 다음 달")
+        # 📌 매 루프마다 변동된 재고에 따른 실시간 시세 재계산
+        current_p = get_dynamic_price(item_name, city, items_info, market_data, settings, initial_stocks)
+        
+        if mode == "매수":
+            if player['money'] < current_p * batch:
+                logs.append(f"❌ 자금 부족으로 중단 (체결: {completed})")
+                break
+            if curr_w + (unit_w * batch) > max_w:
+                logs.append(f"❌ 무게 초과로 중단 (체결: {completed})")
+                break
+            if market_data[city][item_name]['stock'] < batch:
+                logs.append(f"❌ 마을 재고 부족으로 중단 (체결: {completed})")
+                break
+            
+            player['money'] -= current_p * batch
+            player['inv'][item_name] = player['inv'].get(item_name, 0) + batch
+            market_data[city][item_name]['stock'] -= batch
+        else: # 매도
+            if player['inv'].get(item_name, 0) < batch:
+                logs.append(f"❌ 보유 물량 부족으로 중단 (체결: {completed})")
+                break
+            player['money'] += current_p * batch
+            player['inv'][item_name] -= batch
+            market_data[city][item_name]['stock'] += batch
 
-        tab1, tab2, tab3 = st.tabs(["🛒 저잣거리", "🛡️ 용병 관리", "🚩 팔도 이동"])
+        completed += batch
+        logs.append(f"📦 {item_name} {batch}개 {mode} 중... ({completed}/{target_amt})")
+        
+        with log_placeholder.container():
+            st.markdown(f'<div class="trade-progress">{"<br>".join(logs[-5:])}</div>', unsafe_allow_html=True)
+        time.sleep(0.01)
+    return completed
 
-        with tab1: # 저잣거리
-            city = player['pos']
-            st.subheader(f"📍 {city} 시장")
-            for item in items_info:
-                if item in market_data[city]:
-                    current_p = get_price(item, city, items_info, market_data, settings)
-                    stock = market_data[city][item]['stock']
-                    col1, col2, col3 = st.columns([2,1,1])
-                    col1.write(f"**{item}** ({stock}개)")
-                    col2.write(f"{current_p:,}냥")
-                    if col3.button("거래", key=f"btn_{item}"):
-                        st.session_state.active_trade = {'name': item, 'price': current_p, 'weight': items_info[item]['w']}
+# --- 4. 메인 인게임 화면 ---
+if st.session_state.game_started:
+    p = st.session_state.player
+    s = st.session_state.settings
+    i_info = st.session_state.items_info
+    m_info = st.session_state.merc_data
+    m_data = st.session_state.market_data
+    init_s = st.session_state.initial_stocks
 
-            # [사용자 원본의 분할 체결 로직]
-            if 'active_trade' in st.session_state:
-                at = st.session_state.active_trade
-                amt = st.number_input(f"{at['name']} 수량 입력 (99999 등)", 1, 1000000, 100)
-                
-                c_buy, c_sell = st.columns(2)
-                if c_buy.button("🚀 분할 매수"):
-                    log_p = st.empty()
-                    logs = []
-                    completed = 0
-                    while completed < amt:
-                        batch = min(100, amt - completed)
-                        current_p = get_price(at['name'], city, items_info, market_data, settings)
-                        
-                        # 실제 무게/재화 체크
-                        if player['money'] < current_p * batch or curr_w + (at['weight'] * batch) > max_w or market_data[city][at['name']]['stock'] < batch:
-                            logs.append("❌ 중단 (자원/무게 부족)")
-                            break
-                        
-                        player['money'] -= current_p * batch
-                        player['inventory'][at['name']] = player['inventory'].get(at['name'], 0) + batch
-                        market_data[city][at['name']]['stock'] -= batch
-                        curr_w += at['weight'] * batch
-                        completed += batch
-                        
-                        logs.append(f"📦 {at['name']} {batch}개 매수 중... ({completed}/{amt})")
-                        log_p.markdown(f'<div style="background:#f0f2f6;padding:10px;border-radius:5px;">{"<br>".join(logs[-5:])}</div>', unsafe_allow_html=True)
-                        time.sleep(0.01)
-                    st.rerun()
+    # 📌 상단 바: seconds_per_month (180초) 반영
+    sec_per_month = int(s.get('seconds_per_month', 180))
+    elapsed = time.time() - st.session_state.last_time_update
+    remaining = max(0, sec_per_month - int(elapsed))
+    
+    # 실시간 무게 및 소지금 표시
+    curr_w, max_w = get_weight(p, i_info, m_info)
+    
+    st.title(f"🏯 {p['pos']}")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("💰 소지금", f"{p['money']:,}냥")
+    c2.metric("⚖️ 무게", f"{curr_w}/{max_w}근")
+    c3.metric("📅 시간", get_time_display(p))
+    c4.metric("⏰ 다음 달까지", f"{remaining}초")
 
-        with tab2: # 용병 관리 (해고 포함)
-            st.write("### 🛡️ 내 상단 용병")
-            refund_rate = settings.get('fire_refund_rate', 0.5)
-            for i, m_name in enumerate(player['mercs']):
-                c_m, c_b = st.columns([3, 1])
-                refund = int(mercs_data[m_name]['price'] * refund_rate)
-                c_m.write(f"**{m_name}** (+{mercs_data[m_name]['weight_bonus']}근)")
-                if c_b.button(f"해고 ({refund:,}냥)", key=f"fire_{i}"):
-                    player['money'] += refund
-                    player['mercs'].pop(i)
-                    st.rerun()
+    tab1, tab2, tab3 = st.tabs(["🛒 거래", "🛡️ 용병 관리", "🚩 이동"])
 
-        with tab3: # 이동 로직
-            # 사용자님의 기존 이동 로직 및 저장 버튼 삽입
-            st.write("🚩 다른 마을로 이동하시겠습니까?")
-            for country, cities in market_data.items(): # 단순화된 예시
-                if st.button(f"{country} 이동"):
-                    player['pos'] = country
-                    st.rerun()
+    with tab1:
+        target_item = st.selectbox("품목 선택", list(i_info.keys()))
+        trade_qty = st.number_input("거래 수량 (99999 등 큰 숫자 가능)", 1, 1000000, 100)
+        
+        col_b, col_s = st.columns(2)
+        if col_b.button("🚀 매수 실행", use_container_width=True):
+            execute_trade_loop("매수", target_item, trade_qty, p, m_data, p['pos'], i_info, s, init_s)
+            st.rerun()
+        if col_s.button("💰 매도 실행", use_container_width=True):
+            execute_trade_loop("매도", target_item, trade_qty, p, m_data, p['pos'], i_info, s, init_s)
+            st.rerun()
+
+    with tab2:
+        st.subheader("🛡️ 용병 해고 시스템")
+        # 📌 시트의 fire_refund_rate (0.5) 연동
+        refund_rate = s.get('fire_refund_rate', 0.5)
+        for i, m_name in enumerate(p['mercs']):
+            c_info, c_btn = st.columns([3, 1])
+            refund = int(m_info[m_name]['price'] * refund_rate)
+            c_info.write(f"**{m_name}** (+{m_info[m_name]['w_bonus']}근)")
+            if c_btn.button(f"해고 ({refund:,}냥)", key=f"fire_{i}"):
+                p['money'] += refund
+                p['mercs'].pop(i)
+                st.rerun()
