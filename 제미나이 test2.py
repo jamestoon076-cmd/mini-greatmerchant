@@ -647,7 +647,7 @@ if doc:
                             
                             progress_ph = st.empty()
                             
-                            if col_b.button("💰 매수", key=f"buy_{item_name}", use_container_width=True):
+                           if col_b.button("💰 매수", key=f"buy_{item_name}", use_container_width=True):
                                 try:
                                     qty_int = int(qty)
                                     if qty_int > 0:
@@ -656,11 +656,11 @@ if doc:
                                             st.session_state.last_qty[f"{player['pos']}_{item_name}"] = "1"
                                             
                                             for key in list(st.session_state.trade_logs.keys()):
-                                                if key.startswith(f"{player['pos']}_{item_name}"):
-                                                    del st.session_state.trade_logs[key]
-                                            
-                                            log_key = f"{player['pos']}_{item_name}_{time.time()}"
-                                            progress_ph.markdown("<div class='trade-progress'></div>", unsafe_allow_html=True)
+                                if key.startswith(f"{player['pos']}_{item_name}"):
+                                    with progress_ph.container():
+                                        for log in st.session_state.trade_logs[key][-10:]:
+                                            st.markdown(f"<div class='trade-line'>{log}</div>", unsafe_allow_html=True)
+                                    break
                                             
                                             bought, spent = process_buy(
                                                 player, items_info, market_data,
@@ -709,10 +709,10 @@ if doc:
                                                 if key.startswith(f"{player['pos']}_{item_name}"):
                                                     del st.session_state.trade_logs[key]
                                             
-                                            log_key = f"{player['pos']}_{item_name}_{time.time()}"
+                                           log_key = f"{player['pos']}_{item_name}_{time.time()}"
                                             progress_ph.markdown("<div class='trade-progress'></div>", unsafe_allow_html=True)
                                             
-                                            sold, earned = process_sell(
+                                            bought, spent = process_buy(
                                                 player, items_info, market_data,
                                                 player['pos'], item_name, actual_qty, progress_ph, log_key
                                             )
@@ -862,3 +862,4 @@ if doc:
         # 0.5초마다 자동 새로고침 (시간 실시간 업데이트)
         time.sleep(0.5)
         st.rerun()
+
