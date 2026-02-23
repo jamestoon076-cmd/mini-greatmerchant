@@ -599,9 +599,15 @@ if doc:
         tab1, tab2, tab3, tab4, tab5 = st.tabs(["🛒 거래", "📦 인벤토리", "⚔️ 용병", "📊 통계", "⚙️ 기타"])
         
         with tab1:
-            if player['pos'] == "용병 고용소":
+                        if player['pos'] == "용병 고용소":
                 st.subheader("⚔️ 용병 고용")
                 if merc_data:
+                    # settings에서 최대 용병 수 가져오기
+                    max_mercs = int(settings.get('max_mercenaries', 5))
+                    
+                    # 현재 고용된 용병 수 표시
+                    st.info(f"**현재 용병: {len(player['mercs'])}/{max_mercs}명**")
+                    
                     for name, data in merc_data.items():
                         owned = "✓" if name in player['mercs'] else ""
                         with st.container():
@@ -611,17 +617,21 @@ if doc:
                             if owned:
                                 st.button(f"✅ 이미 고용됨", key=f"merc_{name}", disabled=True, use_container_width=True)
                             else:
-                                if st.button(f"⚔️ {name} 고용", key=f"merc_{name}", use_container_width=True):
-                                    if player['money'] >= data['price']:
-                                        player['money'] -= data['price']
-                                        player['mercs'].append(name)
-                                        cw, tw = get_weight(player, items_info, merc_data)
-                                        weight_placeholder.metric("⚖️ 무게", f"{cw}/{tw}근")
-                                        money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
-                                        st.success(f"✅ {name} 고용 완료!")
-                                        st.rerun()
-                                    else:
-                                        st.error("❌ 잔액 부족")
+                                # 최대 인원 제한
+                                if len(player['mercs']) >= max_mercs:
+                                    st.button(f"❌ 최대 인원({max_mercs}명)", key=f"merc_{name}_full", disabled=True, use_container_width=True)
+                                else:
+                                    if st.button(f"⚔️ {name} 고용", key=f"merc_{name}", use_container_width=True):
+                                        if player['money'] >= data['price']:
+                                            player['money'] -= data['price']
+                                            player['mercs'].append(name)
+                                            cw, tw = get_weight(player, items_info, merc_data)
+                                            weight_placeholder.metric("⚖️ 무게", f"{cw}/{tw}근")
+                                            money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
+                                            st.success(f"✅ {name} 고용 완료! ({len(player['mercs'])}/{max_mercs}명)")
+                                            st.rerun()
+                                        else:
+                                            st.error("❌ 잔액 부족")
                 else:
                     st.warning("고용 가능한 용병이 없습니다.")
             
@@ -923,6 +933,7 @@ if doc:
         # 0.5초마다 자동 새로고침
         time.sleep(0.5)
         st.rerun()
+
 
 
 
