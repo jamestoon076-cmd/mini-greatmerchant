@@ -571,7 +571,7 @@ if doc:
         
         tab1, tab2, tab3, tab4, tab5 = st.tabs(["🛒 거래", "📦 인벤토리", "⚔️ 용병", "📊 통계", "⚙️ 기타"])
         
-        with tab1:
+                with tab1:
             if player['pos'] == "용병 고용소":
                 st.subheader("⚔️ 용병 고용")
                 if merc_data:
@@ -626,6 +626,11 @@ if doc:
                         with st.container():
                             st.markdown(f"**{item_name}** {trend}")
                             
+                            # 저장된 결과 로그 표시
+                            result_key = f"result_{player['pos']}_{item_name}"
+                            if result_key in st.session_state:
+                                st.markdown(f"<div class='trade-complete'>{st.session_state[result_key]}</div>", unsafe_allow_html=True)
+                            
                             col1, col2, col3 = st.columns([2,1,1])
                             price_ph = col1.empty()
                             price_ph.markdown(f"<span class='{price_class}'>{d['price']:,}냥</span>", unsafe_allow_html=True)
@@ -645,7 +650,7 @@ if doc:
                             default_qty = st.session_state.last_qty.get(f"{player['pos']}_{item_name}", "1")
                             qty = col_a.text_input("수량", value=default_qty, key=f"qty_{player['pos']}_{item_name}", label_visibility="collapsed")
                             
-                            # 진행상황 표시 영역 - 항상 최근 로그 표시
+                            # 진행상황 표시 영역
                             progress_ph = st.empty()
                             
                             # 저장된 로그가 있으면 표시
@@ -692,7 +697,13 @@ if doc:
                                                 max_ph.write(f"⚡ {new_max_buy}개")
                                                 
                                                 avg_price = spent // bought
-                                                st.markdown(f"<div class='trade-complete'>✅ 총 {bought}개 매수 완료! (총 {spent:,}냥 | 평균가: {avg_price}냥)</div>", unsafe_allow_html=True)
+                                                # 초록색 결과 로그를 세션에 저장
+                                                result_key = f"result_{player['pos']}_{item_name}"
+                                                st.session_state[result_key] = f"✅ 총 {bought}개 매수 완료! (총 {spent:,}냥 | 평균가: {avg_price}냥)"
+                                                
+                                                # 저장된 결과 로그 표시
+                                                if result_key in st.session_state:
+                                                    st.markdown(f"<div class='trade-complete'>{st.session_state[result_key]}</div>", unsafe_allow_html=True)
                                             else:
                                                 st.error("❌ 구매 실패")
                                         else:
@@ -737,7 +748,13 @@ if doc:
                                                 max_ph.write(f"⚡ {new_max_buy}개")
                                                 
                                                 avg_price = earned // sold
-                                                st.markdown(f"<div class='trade-complete'>✅ 총 {sold}개 매도 완료! (총 {earned:,}냥 | 평균가: {avg_price}냥)</div>", unsafe_allow_html=True)
+                                                # 초록색 결과 로그를 세션에 저장
+                                                result_key = f"result_{player['pos']}_{item_name}"
+                                                st.session_state[result_key] = f"✅ 총 {sold}개 매도 완료! (총 {earned:,}냥 | 평균가: {avg_price}냥)"
+                                                
+                                                # 저장된 결과 로그 표시
+                                                if result_key in st.session_state:
+                                                    st.markdown(f"<div class='trade-complete'>{st.session_state[result_key]}</div>", unsafe_allow_html=True)
                                             else:
                                                 st.error("❌ 판매 실패")
                                         else:
@@ -863,6 +880,7 @@ if doc:
         # 0.5초마다 자동 새로고침 (시간 실시간 업데이트)
         time.sleep(0.5)
         st.rerun()
+
 
 
 
