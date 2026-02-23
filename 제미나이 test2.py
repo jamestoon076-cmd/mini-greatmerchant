@@ -609,7 +609,7 @@ if doc:
                     st.info(f"**현재 용병: {len(player['mercs'])}/{max_mercs}명**")
                     
                     for name, data in merc_data.items():
-                        # 같은 이름의 용병이 몇 명 있는지 확인 (중복 허용)
+                        # 같은 이름의 용병이 몇 명 있는지 확인
                         count = sum(1 for m in player['mercs'] if m == name)
                         
                         with st.container():
@@ -617,7 +617,7 @@ if doc:
                                    f"💰 고용비: {data['price']:,}냥\n"
                                    f"⚖️ 무게보너스: +{data['w_bonus']}근")
                             
-                            # 최대 인원 제한만 확인 (같은 이름 중복 허용)
+                            # 최대 인원 제한만 확인
                             if len(player['mercs']) >= max_mercs:
                                 st.button(f"❌ 최대 인원({max_mercs}명)", key=f"merc_{name}_full", disabled=True, use_container_width=True)
                             else:
@@ -636,6 +636,7 @@ if doc:
                     st.warning("고용 가능한 용병이 없습니다.")
             
             elif player['pos'] in market_data:
+                # ... 일반 마을 거래 코드 ...
                 items = list(market_data[player['pos']].keys())
                 if items:
                     st.subheader(f"🛒 {player['pos']} 시세")
@@ -892,32 +893,35 @@ if doc:
                 
                 if move_options:
                     selected = st.selectbox("이동할 마을", move_options)
-                    if st.button("🚀 이동", use_container_width=True):
-                        dest, cost = move_dict[selected]
-                        if player['money'] >= cost:
-                            player['money'] -= cost
-                            # 현재 도시의 로그 삭제 (이동 전 도시)
-                            current_city = player['pos']
-                            keys_to_delete = []
-                            for key in list(st.session_state.trade_logs.keys()):
-                                if key.startswith(f"{current_city}_"):
-                                    keys_to_delete.append(key)
-                            for key in keys_to_delete:
-                                del st.session_state.trade_logs[key]
-                            # 결과 로그도 삭제
-                            result_keys_to_delete = []
-                            for key in list(st.session_state.keys()):
-                                if key.startswith(f"result_{current_city}_"):
-                                    result_keys_to_delete.append(key)
-                            for key in result_keys_to_delete:
-                                del st.session_state[key]
-                            
-                            player['pos'] = dest
-                            money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
-                            st.success(f"✅ {dest}로 이동했습니다!")
-                            st.rerun()
-                        else:
-                            st.error("❌ 잔액 부족")
+                            if st.button("🚀 이동", use_container_width=True):
+                                dest, cost = move_dict[selected]
+                                if player['money'] >= cost:
+                                    player['money'] -= cost
+                                    # 현재 도시의 로그 삭제 (이동 전 도시)
+                                    current_city = player['pos']
+                                    
+                                    # 거래 로그 삭제
+                                    keys_to_delete = []
+                                    for key in list(st.session_state.trade_logs.keys()):
+                                        if key.startswith(f"{current_city}_"):
+                                            keys_to_delete.append(key)
+                                    for key in keys_to_delete:
+                                        del st.session_state.trade_logs[key]
+                                    
+                                    # 결과 로그 삭제
+                                    result_keys_to_delete = []
+                                    for key in list(st.session_state.keys()):
+                                        if key.startswith(f"result_{current_city}_"):
+                                            result_keys_to_delete.append(key)
+                                    for key in result_keys_to_delete:
+                                        del st.session_state[key]
+                                    
+                                    player['pos'] = dest
+                                    money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
+                                    st.success(f"✅ {dest}로 이동했습니다!")
+                                    st.rerun()
+                                else:
+                                    st.error("❌ 잔액 부족")
                 else:
                     st.write("이동 가능한 마을이 없습니다")
             
@@ -940,6 +944,7 @@ if doc:
         # 0.5초마다 자동 새로고침
         time.sleep(0.5)
         st.rerun()
+
 
 
 
