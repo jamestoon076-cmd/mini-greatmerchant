@@ -292,32 +292,64 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
     if initial_stocks is None:
         initial_stocks = st.session_state.get('initial_stocks', {})
     
+    # settings에서 모든 값 가져오기 (기본값 설정)
+    volatility = settings.get('volatility', 500)
+    
+    # 재고 비율 기준값
+    ratio_extreme_high = settings.get('price_ratio_extreme_high', 2.0)
+    ratio_high = settings.get('price_ratio_high', 1.5)
+    ratio_above_normal = settings.get('price_ratio_above_normal', 1.0)
+    ratio_normal = settings.get('price_ratio_normal', 0.7)
+    ratio_low = settings.get('price_ratio_low', 0.4)
+    
+    # 가격 계수
+    factor_extreme_high = settings.get('price_factor_extreme_high', 0.5)
+    factor_high = settings.get('price_factor_high', 0.7)
+    factor_above_normal = settings.get('price_factor_above_normal', 0.85)
+    factor_normal = settings.get('price_factor_normal', 1.0)
+    factor_low = settings.get('price_factor_low', 1.3)
+    factor_extreme_low = settings.get('price_factor_extreme_low', 2.0)
+    
+    # 지역별 가격 보정 계수
+    region_discount = settings.get('region_discount_rate', 0.7)
+    capital_premium = settings.get('capital_premium_rate', 1.3)
+    city_premium = settings.get('city_premium_rate', 1.2)
+    
+    # 최소/최대 가격 비율
+    min_price_rate = settings.get('min_price_rate', 0.4)
+    max_price_rate = settings.get('max_price_rate', 3.0)
+    
     for v_name, v_data in market_data.items():
         for i_name, i_info in v_data.items():
             if i_name in items_info:
                 base = items_info[i_name]['base']
                 stock = i_info['stock']
-                
                 initial_stock = initial_stocks.get(v_name, {}).get(i_name, 100)
+                
                 if initial_stock <= 0:
                     initial_stock = 100
                 
                 if stock <= 0:
-                    i_info['price'] = int(base * 10)
+                    i_info['price'] = int(base * max_price_rate)
                 else:
+                    # 재고 비율 계산
                     stock_ratio = stock / initial_stock
                     
-                    if stock_ratio > 1.5:
-                        price_factor = 0.6
-                    elif stock_ratio > 1.0:
-                        price_factor = 0.8
-                    elif stock_ratio > 0.7:
-                        price_factor = 1.0
-                    elif stock_ratio > 0.4:
-                        price_factor = 1.3
+                    # 재고 비율에 따른 가격 계수 결정
+                    if stock_ratio > ratio_extreme_high:
+                        price_factor = factor_extreme_high
+                    elif stock_ratio > ratio_high:
+                        price_factor = factor_high
+                    elif stock_ratio > ratio_above_normal:
+                        price_factor = factor_above_normal
+                    elif stock_ratio > ratio_normal:
+                        price_factor = factor_normal
+                    elif stock_ratio > ratio_low:
+                        price_factor = factor_low
                     else:
-                        price_factor = 1.8
+                        price_factor = factor_extreme_low
                     
+                    # 지역별 특산물 가격 보정
                     region_discounts = {
                         "부산": ["생선", "멸치", "굴비", "대구", "명태"],
                         "강원도": ["감자", "옥수수", "송이버섯"],
@@ -327,22 +359,29 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
                         "제주도": ["감귤", "해산물", "돼지고기"],
                     }
                     
+                    # 산지 보정
                     for region, items in region_discounts.items():
                         if v_name == region and i_name in items:
-                            price_factor *= 0.7
+                            price_factor *= region_discount
                             break
                     
+                    # 한양 보정
                     if v_name == "한양":
-                        price_factor *= 1.3
+                        price_factor *= capital_premium
                     
-                    if v_name in ["평양", "개성"] and i_name not in region_discounts.get(v_name, []):
-                        price_factor *= 1.2
+                    # 주요 도시 보정
+                    if v_name in ["평양", "개성", "서울"]:
+                        price_factor *= city_premium
                     
                     i_info['price'] = int(base * price_factor)
                     
-                    min_price = int(base * 0.4)
+                    # 최소/최대 가격 제한
+                    min_price = int(base * min_price_rate)
+                    max_price = int(base * max_price_rate)
                     if i_info['price'] < min_price:
                         i_info['price'] = min_price
+                    if i_info['price'] > max_price:
+                        i_info['price'] = max_price
 
 def get_weight(player, items_info, merc_data):
     cw = 0
@@ -886,6 +925,7 @@ if doc:
         # 0.5초마다 자동 새로고침 (시간 실시간 업데이트)
         time.sleep(0.5)
         st.rerun()
+
 
 
 
