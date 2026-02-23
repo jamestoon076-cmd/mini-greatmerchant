@@ -244,7 +244,8 @@ def update_game_time(player, settings, market_data, initial_stocks):
         return player, []
     
     elapsed = current_time - st.session_state.last_time_update
-    seconds_per_month = 180
+    # ✅ settings에서 seconds_per_month 값 가져오기
+    seconds_per_month = settings.get('seconds_per_month', 30)  # 기본값 30
     months_passed = int(elapsed / seconds_per_month)
     
     events = []
@@ -264,6 +265,8 @@ def update_game_time(player, settings, market_data, initial_stocks):
         
         st.session_state.last_time_update = current_time
         st.session_state.last_update = current_time
+    
+    return player, events
         
         if old_month != player['month'] or old_year != player['year']:
             events.append(("month", f"🌙 {player['year']}년 {player['month']}월이 시작되었습니다!"))
@@ -978,6 +981,7 @@ if doc:
         # 0.5초마다 자동 새로고침
         time.sleep(0.5)
         st.rerun()
+
 
 
 
