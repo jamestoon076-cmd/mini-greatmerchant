@@ -244,4 +244,5 @@ if data:
                             st.rerun()
                         else: st.error("용병단이 가득 찼습니다.")
                     else: st.error("자금이 부족합니다.")
-}
+
+
