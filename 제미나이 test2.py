@@ -342,18 +342,13 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
                         else:
                             stock_ratio = stock / initial_stock
                             
-                            if stock_ratio > ratio_extreme_high:
-                                price_factor = factor_extreme_high
-                            elif stock_ratio > ratio_high:
-                                price_factor = factor_high
-                            elif stock_ratio > ratio_above_normal:
-                                price_factor = factor_above_normal
-                            elif stock_ratio > ratio_normal:
-                                price_factor = factor_normal
-                            elif stock_ratio > ratio_low:
-                                price_factor = factor_low
+                            # ✅ 임시로 직접 값 설정 (스프레드시트 무시)
+                            if stock_ratio < 0.5:  # 재고 50% 미만
+                                price_factor = 2.5  # 250% 가격
+                            elif stock_ratio < 1.0:  # 재고 100% 미만
+                                price_factor = 1.8  # 180% 가격
                             else:
-                                price_factor = factor_extreme_low
+                                price_factor = 1.0
                             
                             i_info['price'] = int(base * price_factor)
                             
@@ -943,6 +938,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
