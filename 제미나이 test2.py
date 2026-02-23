@@ -443,7 +443,7 @@ if doc:
         st.title("🏯 조선거상 미니")
         st.markdown("---")
         
-        settings, items_info, merc_data, villages, initial_stocks, slots = load_game_data()
+        settings, items_info, merc_data, villages, initial_stocks, slots, city_settings = load_game_data()        
         
         if slots:
             st.subheader("📋 세이브 슬롯 선택")
@@ -841,6 +841,7 @@ if doc:
         # 0.5초마다 자동 새로고침 (시간 실시간 업데이트)
         time.sleep(0.5)
         st.rerun()
+
 
 
 
