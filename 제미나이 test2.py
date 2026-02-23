@@ -300,24 +300,14 @@ def get_time_display(player):
     return f"{player['year']}년 {month_names[player['month']-1]} {player['week']}주차"
 
 # --- 6. 게임 로직 함수들 ---
-def update_prices(settings, items_info, market_data, villages)  # villages 전달
-    """
-    villages: st.session_state.villages (초기재고가 저장된 원본 데이터)
-    """
+def update_prices(settings, items_info, market_data, initial_stocks=None):
+    if initial_stocks is None:
+        initial_stocks = st.session_state.get('initial_stocks', {})
     
-    # 설정값 가져오기
-    ratio_extreme_high = settings.get('ratio_extreme_high', 2.0)
-    ratio_high = settings.get('ratio_high', 1.5)
-    ratio_above_normal = settings.get('ratio_above_normal', 1.0)
-    ratio_normal = settings.get('ratio_normal', 0.7)
-    ratio_low = settings.get('ratio_low', 0.4)
+    # ✅ st.session_state에서 villages 직접 가져오기
+    villages = st.session_state.get('villages', {})
     
-    factor_extreme_high = settings.get('factor_extreme_high', 0.2)
-    factor_high = settings.get('factor_high', 0.7)
-    factor_above_normal = settings.get('factor_above_normal', 0.85)
-    factor_normal = settings.get('factor_normal', 1.0)
-    factor_low = settings.get('factor_low', 1.3)
-    factor_extreme_low = settings.get('factor_extreme_low', 2.0)
+    # ... 나머지 코드 ...
     
     for v_name, v_data in market_data.items():
         if v_name == "용병 고용소":
@@ -333,6 +323,8 @@ def update_prices(settings, items_info, market_data, villages)  # villages 전�
                     initial_stock = villages[v_name]['items'][i_name]
                 else:
                     initial_stock = 100
+                
+                # ... 나머지 코드 ...
                 
                 if stock <= 0:
                     i_info['price'] = int(base * 3.0)
@@ -557,7 +549,7 @@ if doc:
                 st.session_state.events = events
             st.session_state.last_update = current_time
         
-        update_prices(settings, items_info, market_data, initial_stocks)
+        update_prices(settings, items_info, market_data, villages)  # villages 전달
         cw, tw = get_weight(player, items_info, merc_data)
         
         if st.session_state.events:
@@ -934,6 +926,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
