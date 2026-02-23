@@ -665,53 +665,51 @@ if doc:
                             progress_ph = st.empty()
                             
                            if col_b.button("💰 매수", key=f"buy_{item_name}", use_container_width=True):
-    try:
-        qty_int = int(qty)
-        if qty_int > 0:
-            actual_qty = min(qty_int, max_buy)
-            if actual_qty > 0:
-                # 고유한 로그 키 생성 (아이템명 + 타임스탬프)
-                log_key = f"buy_{player['pos']}_{item_name}_{time.time()}"
-                
-                progress_ph.markdown("<div class='trade-progress'></div>", unsafe_allow_html=True)
-                
-                bought, spent, trade_log = process_buy(
-                    player, items_info, market_data,
-                    player['pos'], item_name, actual_qty, progress_ph, log_key
-                )
-                
-                if bought > 0:
-                    st.session_state.stats['total_bought'] += bought
-                    st.session_state.stats['total_spent'] += spent
-                    st.session_state.stats['trade_count'] += 1
-                    
-                    money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
-                    cw, tw = get_weight(player, items_info, merc_data)
-                    weight_placeholder.metric("⚖️ 무게", f"{cw}/{tw}근")
-                    
-                    price_ph.markdown(f"<span class='{price_class}'>{d['price']:,}냥</span>", unsafe_allow_html=True)
-                    stock_ph.write(f"📦 {d['stock']}개")
-                    
-                    new_max_buy = calculate_max_purchase(
-                        player, items_info, market_data, 
-                        player['pos'], item_name, d['price']
-                    )
-                    max_ph.write(f"⚡ {new_max_buy}개")
-                    
-                    avg_price = spent // bought
-                    st.markdown(f"<div class='trade-complete'>✅ 총 {bought}개 매수 완료! (총 {spent:,}냥 | 평균가: {avg_price}냥)</div>", unsafe_allow_html=True)
-                    
-                    # 여기서 로그를 삭제하지 않음 (유지)
-                    # st.rerun()도 하지 않음
-                else:
-                    st.error("❌ 구매 실패")
-            else:
-                st.error("❌ 구매 가능한 수량이 없습니다")
-        else:
-            st.error("❌ 0보다 큰 수량을 입력하세요")
-    except ValueError:
-        st.error("❌ 올바른 숫자를 입력하세요")
+                                try:
+                                    qty_int = int(qty)
+                                    if qty_int > 0:
+                                        actual_qty = min(qty_int, max_buy)
+                                        if actual_qty > 0:
+                                            # 고유한 로그 키 생성
+                                            log_key = f"buy_{player['pos']}_{item_name}_{time.time()}"
+                                            
+                                            progress_ph.markdown("<div class='trade-progress'></div>", unsafe_allow_html=True)
+                                            
+                                            bought, spent, trade_log = process_buy(
+                                                player, items_info, market_data,
+                                                player['pos'], item_name, actual_qty, progress_ph, log_key
+                                            )
+                                            
+                                            if bought > 0:
+                                                st.session_state.stats['total_bought'] += bought
+                                                st.session_state.stats['total_spent'] += spent
+                                                st.session_state.stats['trade_count'] += 1
+                                                
+                                                money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
+                                                cw, tw = get_weight(player, items_info, merc_data)
+                                                weight_placeholder.metric("⚖️ 무게", f"{cw}/{tw}근")
+                                                
+                                                price_ph.markdown(f"<span class='{price_class}'>{d['price']:,}냥</span>", unsafe_allow_html=True)
+                                                stock_ph.write(f"📦 {d['stock']}개")
+                                                
+                                                new_max_buy = calculate_max_purchase(
+                                                    player, items_info, market_data, 
+                                                    player['pos'], item_name, d['price']
+                                                )
+                                                max_ph.write(f"⚡ {new_max_buy}개")
+                                                
+                                                avg_price = spent // bought
+                                                st.markdown(f"<div class='trade-complete'>✅ 총 {bought}개 매수 완료! (총 {spent:,}냥 | 평균가: {avg_price}냥)</div>", unsafe_allow_html=True)
+                                            else:
+                                                st.error("❌ 구매 실패")
+                                        else:
+                                            st.error("❌ 구매 가능한 수량이 없습니다")
+                                    else:
+                                        st.error("❌ 0보다 큰 수량을 입력하세요")
+                                except ValueError:
+                                    st.error("❌ 올바른 숫자를 입력하세요")
                             
+                            # 매도 버튼
                             if col_c.button("📦 매도", key=f"sell_{item_name}", use_container_width=True):
                                 try:
                                     qty_int = int(qty)
@@ -719,13 +717,8 @@ if doc:
                                         max_sell = player['inv'].get(item_name, 0)
                                         actual_qty = min(qty_int, max_sell)
                                         if actual_qty > 0:
-                                            # 입력값 저장
-                                            st.session_state.last_qty[f"{player['pos']}_{item_name}"] = "1"
-                                            
-                                            # 해당 아이템의 이전 로그 삭제
-                                            for key in list(st.session_state.trade_logs.keys()):
-                                                if key.startswith(f"{player['pos']}_{item_name}"):
-                                                    del st.session_state.trade_logs[key]
+                                            # 고유한 로그 키 생성
+                                            log_key = f"sell_{player['pos']}_{item_name}_{time.time()}"
                                             
                                             progress_ph.markdown("<div class='trade-progress'></div>", unsafe_allow_html=True)
                                             
@@ -754,12 +747,6 @@ if doc:
                                                 
                                                 avg_price = earned // sold
                                                 st.markdown(f"<div class='trade-complete'>✅ 총 {sold}개 매도 완료! (총 {earned:,}냥 | 평균가: {avg_price}냥)</div>", unsafe_allow_html=True)
-                                                
-                                                # 2초 후 로그 삭제
-                                                time.sleep(2)
-                                                if log_key in st.session_state.trade_logs:
-                                                    del st.session_state.trade_logs[log_key]
-                                                st.rerun()
                                             else:
                                                 st.error("❌ 판매 실패")
                                         else:
@@ -881,4 +868,5 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
