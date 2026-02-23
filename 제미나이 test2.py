@@ -304,25 +304,24 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
     if initial_stocks is None:
         initial_stocks = st.session_state.get('initial_stocks', {})
     
-    # 기본 설정값
-    default_ratio_extreme_high = settings.get('price_ratio_extreme_high', 2.0)
-    default_ratio_high = settings.get('price_ratio_high', 1.5)
-    default_ratio_above_normal = settings.get('price_ratio_above_normal', 1.0)
-    default_ratio_normal = settings.get('price_ratio_normal', 0.7)
-    default_ratio_low = settings.get('price_ratio_low', 0.4)
+    # ✅ Setting_Data에서 직접 값을 가져옴
+    ratio_extreme_high = settings.get('ratio_extreme_high', 2.0)
+    ratio_high = settings.get('ratio_high', 1.5)
+    ratio_above_normal = settings.get('ratio_above_normal', 1.0)
+    ratio_normal = settings.get('ratio_normal', 0.7)
+    ratio_low = settings.get('ratio_low', 0.4)
     
-    default_factor_extreme_high = settings.get('price_factor_extreme_high', 0.5)
-    default_factor_high = settings.get('price_factor_high', 0.7)
-    default_factor_above_normal = settings.get('price_factor_above_normal', 0.85)
-    default_factor_normal = settings.get('price_factor_normal', 1.0)
-    default_factor_low = settings.get('price_factor_low', 1.3)
-    default_factor_extreme_low = settings.get('price_factor_extreme_low', 2.0)
+    factor_extreme_high = settings.get('factor_extreme_high', 0.5)
+    factor_high = settings.get('factor_high', 0.7)
+    factor_above_normal = settings.get('factor_above_normal', 0.85)
+    factor_normal = settings.get('factor_normal', 1.0)
+    factor_low = settings.get('factor_low', 1.3)
+    factor_extreme_low = settings.get('factor_extreme_low', 2.0)
     
     min_price_rate = settings.get('min_price_rate', 0.4)
     max_price_rate = settings.get('max_price_rate', 3.0)
     
     for v_name, v_data in market_data.items():
-        # 용병 고용소는 가격 변동 없음
         if v_name == "용병 고용소":
             continue
             
@@ -338,26 +337,24 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
                 if stock <= 0:
                     i_info['price'] = int(base * max_price_rate)
                 else:
-                    # 재고 비율 계산 (현재 재고 / 초기 재고)
                     stock_ratio = stock / initial_stock
                     
-                    # ✅ 재고 비율에 따라서만 가격 결정 (지역별 할인 없음)
-                    if stock_ratio > default_ratio_extreme_high:
-                        price_factor = default_factor_extreme_high
-                    elif stock_ratio > default_ratio_high:
-                        price_factor = default_factor_high
-                    elif stock_ratio > default_ratio_above_normal:
-                        price_factor = default_factor_above_normal
-                    elif stock_ratio > default_ratio_normal:
-                        price_factor = default_factor_normal
-                    elif stock_ratio > default_ratio_low:
-                        price_factor = default_factor_low
+                    # ✅ 스프레드시트 값으로 가격 결정
+                    if stock_ratio > ratio_extreme_high:
+                        price_factor = factor_extreme_high
+                    elif stock_ratio > ratio_high:
+                        price_factor = factor_high
+                    elif stock_ratio > ratio_above_normal:
+                        price_factor = factor_above_normal
+                    elif stock_ratio > ratio_normal:
+                        price_factor = factor_normal
+                    elif stock_ratio > ratio_low:
+                        price_factor = factor_low
                     else:
-                        price_factor = default_factor_extreme_low
+                        price_factor = factor_extreme_low
                     
                     i_info['price'] = int(base * price_factor)
                     
-                    # 최소/최대 가격 제한
                     min_price = int(base * min_price_rate)
                     if i_info['price'] < min_price:
                         i_info['price'] = min_price
@@ -926,6 +923,7 @@ if doc:
         # 0.5초마다 자동 새로고침
         time.sleep(0.5)
         st.rerun()
+
 
 
 
