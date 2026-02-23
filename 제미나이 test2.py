@@ -109,7 +109,7 @@ def load_game_data():
                 }
         
         # 마을 데이터 로드
-        vil_ws = doc.worksheet("Village_Data")
+        vil_ws = doc.worksheet("Korea_Village_Data")
         vil_vals = vil_ws.get_all_values()
         headers = [h.strip() for h in vil_vals[0]]
         
@@ -609,3 +609,4 @@ else:
         if st.button("💾 저장"):
             save_player_data(doc, player, st.session_state.stats, st.session_state.device_id)
             st.success("저장 완료!")
+
