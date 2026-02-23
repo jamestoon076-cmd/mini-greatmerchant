@@ -810,7 +810,7 @@ if doc:
             
             st.metric("거래 횟수", f"{stats['trade_count']}회")
         
-        with tab5:
+               with tab5:
             st.subheader("⚙️ 게임 메뉴")
             
             st.write("**🚚 마을 이동**")
@@ -830,14 +830,36 @@ if doc:
                 
                 if move_options:
                     selected = st.selectbox("이동할 마을", move_options)
-                            with tab5:
-            # ... 기타 메뉴 코드 ...
+                    if st.button("🚀 이동", use_container_width=True):
+                        dest, cost = move_dict[selected]
+                        if player['money'] >= cost:
+                            player['money'] -= cost
+                            player['pos'] = dest
+                            money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
+                            st.success(f"✅ {dest}로 이동했습니다!")
+                            st.rerun()
+                        else:
+                            st.error("❌ 잔액 부족")
+                else:
+                    st.write("이동 가능한 마을이 없습니다")
+            
+            st.divider()
+            
+            st.write("**⏰ 시간 시스템**")
+            st.info(f"30초 = 게임 1달\n\n현재 시간: {get_time_display(player)}")
+            
+            st.divider()
+            
+            if st.button("💾 저장", use_container_width=True):
+                if save_player_data(doc, player, st.session_state.stats, st.session_state.device_id):
+                    st.success("✅ 저장 완료!")
+            
             if st.button("🚪 메인으로", use_container_width=True):
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
         
-        # ⭐⭐⭐ 여기에 이 코드를 추가하세요! ⭐⭐⭐
+        # ⭐⭐⭐ 여기에 이 코드를 추가! ⭐⭐⭐
         # 0.5초마다 자동 새로고침 (시간 실시간 업데이트)
         time.sleep(0.5)
         st.rerun()
@@ -861,4 +883,5 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
