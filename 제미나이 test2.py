@@ -9,10 +9,11 @@ from datetime import datetime
 # --- 1. 페이지 설정 및 초기화 ---
 st.set_page_config(page_title="조선거상 미니", page_icon="🏯", layout="wide")
 
+# 매매 로그 유지를 위한 세션 상태 초기화
 if 'trade_logs' not in st.session_state:
     st.session_state.trade_logs = []
 
-# --- 2. 데이터 연동 (캐시) ---
+# --- 2. 데이터 연동 (캐싱) ---
 @st.cache_resource
 def get_gsheet_client():
     try:
@@ -83,7 +84,7 @@ if static_data:
         player = st.session_state.player
         c_w, m_w = get_status(player, items_info, mercs_info)
 
-        # 상단 실시간 UI (잊지 말라고 하신 초시간 표시)
+        # 상단 실시간 UI
         st.markdown(f"""
         <div style="background:#1a1a1a; color:#0f0; padding:15px; border-radius:10px; border:2px solid #444;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -93,9 +94,9 @@ if static_data:
             <p style="margin:10px 0 0 0;">📍 <b>{player['pos']}</b> | 💰 <b>{player['money']:,}냥</b> | ⚖️ <b>{c_w:,} / {m_w:,} 斤</b></p>
         </div>""", unsafe_allow_html=True)
 
-        tab1, tab2, tab3, tab4 = st.tabs(["🛒 저잣거리", "🚩 이동", "⚔️ 용병 주막", "🎒 정보/저장"])
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(["🛒 저잣거리", "🚩 이동", "⚔️ 용병 주막", "📈 통계/분석", "💾 저장"])
 
-        with tab1: # 저잣거리
+        with tab1: # 저잣거리 (로그 유지 버전)
             if 'villages' not in st.session_state: st.session_state.villages = doc.worksheet("Village_Data").get_all_records()
             v_idx = next(i for i, v in enumerate(st.session_state.villages) if v['village_name'] == player['pos'])
             v_data = st.session_state.villages[v_idx]
@@ -116,13 +117,12 @@ if static_data:
                 amt = st.number_input("수량", 1, 100000, 100)
                 b_col, s_col = st.columns(2)
                 
-                # 로그 출력 영역
                 if st.session_state.trade_logs:
                     st.code("\n".join(st.session_state.trade_logs[-5:]))
 
                 if b_col.button("일괄 매수 시작"):
                     done = 0
-                    st.session_state.trade_logs = [] # 새 거래 시 로그 초기화
+                    st.session_state.trade_logs = []
                     while done < amt:
                         curr_weight, max_weight = get_status(player, items_info, mercs_info)
                         cur_s = int(v_data[at])
@@ -139,7 +139,7 @@ if static_data:
                         player['inventory'][at] = player['inventory'].get(at, 0) + batch
                         v_data[at] = int(v_data[at]) - batch
                         done += batch
-                        st.session_state.trade_logs.append(f"✅ {done}/{amt}개 체결 완료 (단가: {p_now:,}냥)")
+                        st.session_state.trade_logs.append(f"✅ {done}/{amt}개 체결... (단가: {p_now:,}냥)")
                         time.sleep(0.01)
                     doc.worksheet("Village_Data").update_cell(v_idx+2, list(v_data.keys()).index(at)+1, v_data[at])
                     st.rerun()
@@ -156,12 +156,12 @@ if static_data:
                         player['inventory'][at] -= batch
                         v_data[at] = int(v_data[at]) + batch
                         done += batch
-                        st.session_state.trade_logs.append(f"💰 {done}/{target}개 판매 완료 (단가: {p_now:,}냥)")
+                        st.session_state.trade_logs.append(f"💰 {done}/{target}개 판매... (단가: {p_now:,}냥)")
                         time.sleep(0.01)
                     doc.worksheet("Village_Data").update_cell(v_idx+2, list(v_data.keys()).index(at)+1, v_data[at])
                     st.rerun()
 
-        with tab2: # 모든 도시 이동 복구
+        with tab2: # 이동
             st.subheader("🚩 팔도 강산 이동")
             cols = st.columns(3)
             for idx, v in enumerate(st.session_state.villages):
@@ -171,11 +171,9 @@ if static_data:
                         player['pos'] = v['village_name']
                         st.rerun()
 
-        with tab3: # 용병 관리 (고용/해고)
-            st.subheader("⚔️ 용병 고용 및 관리")
-            if player['pos'] != "용병 고용소": st.warning("용병은 '용병 고용소'에서 관리 가능합니다.")
-            
-            # 고용 영역
+        with tab3: # 용병
+            st.subheader("⚔️ 용병 고용 및 해고")
+            if player['pos'] != "용병 고용소": st.warning("용병 관리는 '용병 고용소'에서만 가능합니다.")
             for m_name, m_info in mercs_info.items():
                 mc1, mc2, mc3 = st.columns([2, 1, 1])
                 mc1.write(f"**{m_name}** (+{m_info['w_bonus']:,} 斤)")
@@ -185,9 +183,7 @@ if static_data:
                         player['money'] -= m_info['price']
                         player['mercs'].append(m_name)
                         st.rerun()
-
             st.divider()
-            st.markdown("#### 보유 용병 목록 (해고 시 50% 환불)")
             for idx, m_name in enumerate(player['mercs']):
                 rc1, rc2 = st.columns([3, 1])
                 rc1.write(f"{idx+1}. **{m_name}**")
@@ -196,7 +192,38 @@ if static_data:
                     player['mercs'].pop(idx)
                     st.rerun()
 
-        with tab4: # 저장 탭
+        with tab4: # 통계/분석 탭 (신규)
+            st.subheader("📈 상단 분석 보고서")
+            
+            # 1. 총 자산 계산
+            total_inv_value = 0
+            for item, count in player['inventory'].items():
+                # 현재 위치 시세 기준 가치 계산
+                cur_s = int(v_data.get(item, 5000))
+                p_now = calculate_price(item, cur_s, items_info, settings)
+                total_inv_value += (count * p_now)
+            
+            total_assets = player['money'] + total_inv_value
+            
+            m1, m2, m3 = st.columns(3)
+            m1.metric("총 자산 가치", f"{total_assets:,}냥")
+            m2.metric("보유 현금", f"{player['money']:,}냥")
+            m3.metric("물품 가치(현재지 기준)", f"{total_inv_value:,}냥")
+            
+            st.divider()
+            
+            # 2. 전국 시장 분석 (어떤게 비싼가?)
+            st.markdown("#### 🔍 전국 품목 수급 현황 (시세 영향)")
+            item_analysis = []
+            for item in items_info.keys():
+                total_stock = sum(int(v.get(item, 0)) for v in st.session_state.villages if v.get(item))
+                avg_stock = total_stock / len(st.session_state.villages)
+                status = "🔴 공급 부족 (가격 상승)" if avg_stock < 2000 else "🟢 공급 원활"
+                item_analysis.append({"품목": item, "전국 총 재고": f"{total_stock:,}", "상태": status})
+            
+            st.table(item_analysis)
+
+        with tab5: # 저장
             if st.button("💾 데이터 서버 저장"):
                 ws = doc.worksheet("Player_Data")
                 r_idx = st.session_state.slot_num + 1
