@@ -381,7 +381,7 @@ def process_buy(player, items_info, market_data, pos, item_name, qty, progress_p
     batch_prices = []
     
     while total_bought < qty:
-        update_prices(st.session_state.settings, items_info, market_data)
+        update_prices(st.session_state.settings, items_info, market_data, st.session_state.initial_stocks)
         target = market_data[pos][item_name]
         cw, tw = get_weight(player, items_info, st.session_state.merc_data)
         
@@ -421,7 +421,7 @@ def process_sell(player, items_info, market_data, pos, item_name, qty, progress_
     batch_prices = []
     
     while total_sold < qty:
-        update_prices(st.session_state.settings, items_info, market_data)
+        update_prices(st.session_state.settings, items_info, market_data, st.session_state.initial_stocks)
         current_price = market_data[pos][item_name]['price']
         batch = min(10, qty - total_sold, player['inv'].get(item_name, 0))
         
@@ -553,7 +553,7 @@ if doc:
             st.session_state.last_update = current_time
         
         # 시세 업데이트
-        update_prices(settings, items_info, market_data)
+        update_prices(settings, items_info, market_data, initial_stocks)
         cw, tw = get_weight(player, items_info, merc_data)
         
         # 이벤트 표시
@@ -786,67 +786,4 @@ if doc:
         
         # [탭4] 통계
         with tab4:
-            st.subheader("📊 거래 통계")
-            stats = st.session_state.stats
-            
-            col1, col2 = st.columns(2)
-            col1.metric("총 구매", f"{stats['total_bought']}개")
-            col2.metric("총 판매", f"{stats['total_sold']}개")
-            
-            col3, col4 = st.columns(2)
-            col3.metric("총 지출", f"{stats['total_spent']:,}냥")
-            col4.metric("총 수익", f"{stats['total_earned']:,}냥")
-            
-            if stats['total_spent'] > 0:
-                profit = stats['total_earned'] - stats['total_spent']
-                profit_rate = (profit / stats['total_spent']) * 100
-                st.metric("순이익", f"{profit:+,}냥", f"{profit_rate:+.1f}%")
-            
-            st.metric("거래 횟수", f"{stats['trade_count']}회")
-        
-        with tab5:
-    st.subheader("⚙️ 게임 메뉴")
-    
-    # 마을 이동
-    st.write("**🚚 마을 이동**")
-    towns = list(villages.keys())
-    if player['pos'] in villages:
-        curr_v = villages[player['pos']]
-        move_options = []
-        move_dict = {}
-        
-        for t in towns:
-            if t != player['pos']:
-                dist = math.sqrt((curr_v['x'] - villages[t]['x'])**2 + (curr_v['y'] - villages[t]['y'])**2)
-                cost = int(dist * settings.get('travel_cost', 15))
-                option_text = f"{t} (💰 {cost:,}냥)"
-                move_options.append(option_text)
-                move_dict[option_text] = (t, cost)
-        
-        if move_options:
-            selected = st.selectbox("이동할 마을", move_options)
-            if st.button("🚀 이동", use_container_width=True):
-                dest, cost = move_dict[selected]
-                if player['money'] >= cost:
-                    player['money'] -= cost
-                    player['pos'] = dest
-                    money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
-                    st.success(f"✅ {dest}로 이동했습니다!")
-                    st.rerun()
-                else:
-                    st.error("❌ 잔액 부족")
-        else:
-            st.write("이동 가능한 마을이 없습니다")
-    
-    st.divider()
-    
-    # 시간 정보
-    st.write("**⏰ 시간 시스템**")
-    remaining = 180 - int(time.time() - st.session_state.last_time_update)
-    if remaining < 0:
-        remaining = 0
-    st.info(f"현실 3분 = 게임 1달\n\n다음 달까지: {remaining}초")
-    
-    st.divider()
-
-
+            st.subheader("
