@@ -893,7 +893,7 @@ if doc:
                 
                 if move_options:
                     selected = st.selectbox("이동할 마을", move_options)
-                            if st.button("🚀 이동", use_container_width=True):
+                        if st.button("🚀 이동", use_container_width=True):
                                 dest, cost = move_dict[selected]
                                 if player['money'] >= cost:
                                     player['money'] -= cost
@@ -922,8 +922,8 @@ if doc:
                                     st.rerun()
                                 else:
                                     st.error("❌ 잔액 부족")
-                else:
-                    st.write("이동 가능한 마을이 없습니다")
+                            else:
+                                st.write("이동 가능한 마을이 없습니다")
             
             st.divider()
             
@@ -944,6 +944,7 @@ if doc:
         # 0.5초마다 자동 새로고침
         time.sleep(0.5)
         st.rerun()
+
 
 
 
