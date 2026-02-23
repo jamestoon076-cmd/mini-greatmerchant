@@ -410,7 +410,7 @@ def process_buy(player, items_info, market_data, pos, item_name, qty, progress_p
             for log in trade_log[-5:]:
                 st.markdown(f"<div class='trade-line'>{log}</div>", unsafe_allow_html=True)
         
-        time.sleep(0.2)
+        time.sleep(0.1)
     
     return total_bought, total_spent, trade_log
 
@@ -445,7 +445,7 @@ def process_sell(player, items_info, market_data, pos, item_name, qty, progress_
             for log in trade_log[-5:]:
                 st.markdown(f"<div class='trade-line'>{log}</div>", unsafe_allow_html=True)
         
-        time.sleep(0.2)
+        time.sleep(0.1)
     
     return total_sold, total_earned, trade_log
 
@@ -851,4 +851,5 @@ if doc:
             st.divider()
             
             # 시간 정보
+
 
