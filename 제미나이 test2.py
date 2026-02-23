@@ -304,22 +304,17 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
     if initial_stocks is None:
         initial_stocks = st.session_state.get('initial_stocks', {})
     
-    # 🔥🔥🔥 강제 디버깅: initial_stocks 전체 출력
-    st.write("### 🔍 initial_stocks 전체 데이터")
-    st.json(initial_stocks)
+    # ✅ villages 데이터 직접 가져오기
+    villages = st.session_state.get('villages', {})
     
-    # Setting_Data에서 직접 값을 가져옴
-    ratio_extreme_high = settings.get('ratio_extreme_high', 2.0)
-    # ... 나머지 코드 ...
-    
-    # Setting_Data에서 직접 값을 가져옴
+    # 설정값 가져오기
     ratio_extreme_high = settings.get('ratio_extreme_high', 2.0)
     ratio_high = settings.get('ratio_high', 1.5)
     ratio_above_normal = settings.get('ratio_above_normal', 1.0)
     ratio_normal = settings.get('ratio_normal', 0.7)
     ratio_low = settings.get('ratio_low', 0.4)
     
-    factor_extreme_high = settings.get('factor_extreme_high', 0.5)
+    factor_extreme_high = settings.get('factor_extreme_high', 0.2)  # 20%로 수정
     factor_high = settings.get('factor_high', 0.7)
     factor_above_normal = settings.get('factor_above_normal', 0.85)
     factor_normal = settings.get('factor_normal', 1.0)
@@ -334,57 +329,48 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
             continue
             
         for i_name, i_info in v_data.items():
-                    if i_name in items_info:
-                        base = items_info[i_name]['base']
-                        stock = i_info['stock']
-                        
-                        # 🔥 강제로 숫자로 변환
-                        try:
-                            stock = int(stock)
-                        except:
-                            stock = 0
-                            
-                        initial_stock = initial_stocks.get(v_name, {}).get(i_name, 100)
-                        # 🔥 강제로 숫자로 변환
-                        try:
-                            initial_stock = int(initial_stock)
-                        except:
-                            initial_stock = 100
-                        
-                        # 디버깅: 실제 초기재고 값 확인
-                        print(f"🔍 {v_name} {i_name}: 현재재고={stock}, 초기재고={initial_stock}, 비율={stock/initial_stock if initial_stock>0 else 0}")
-                        
-                        if initial_stock <= 0:
-                            initial_stock = 100
-                        
-                        if stock <= 0:
-                            i_info['price'] = int(base * max_price_rate)
-                        else:
-                            stock_ratio = stock / initial_stock
-                            
-                            # 재고 비율에 따른 가격 계수 결정
-                            if stock_ratio > ratio_extreme_high:
-                                price_factor = factor_extreme_high
-                            elif stock_ratio > ratio_high:
-                                price_factor = factor_high
-                            elif stock_ratio > ratio_above_normal:
-                                price_factor = factor_above_normal
-                            elif stock_ratio > ratio_normal:
-                                price_factor = factor_normal
-                            elif stock_ratio > ratio_low:
-                                price_factor = factor_low
-                            else:
-                                price_factor = factor_extreme_low
-                            
-                            i_info['price'] = int(base * price_factor)
-                            
-                            # 최소/최대 가격 제한
-                            min_price = int(base * min_price_rate)
-                            if i_info['price'] < min_price:
-                                i_info['price'] = min_price
-                            if i_info['price'] > base * max_price_rate:
-                                i_info['price'] = int(base * max_price_rate)
-
+            if i_name in items_info:
+                base = items_info[i_name]['base']
+                stock = i_info['stock']
+                
+                # ✅ villages에서 초기재고 가져오기 (가장 확실한 방법)
+                if v_name in villages and i_name in villages[v_name]['items']:
+                    initial_stock = villages[v_name]['items'][i_name]
+                else:
+                    initial_stock = 100
+                
+                # 디버깅: 터미널에서 확인
+                print(f"🔍 {v_name} {i_name}: 현재={stock}, 초기={initial_stock}, 비율={stock/initial_stock:.2f}")
+                
+                if stock <= 0:
+                    i_info['price'] = int(base * max_price_rate)
+                else:
+                    stock_ratio = stock / initial_stock
+                    
+                    if stock_ratio > ratio_extreme_high:
+                        price_factor = factor_extreme_high
+                    elif stock_ratio > ratio_high:
+                        price_factor = factor_high
+                    elif stock_ratio > ratio_above_normal:
+                        price_factor = factor_above_normal
+                    elif stock_ratio > ratio_normal:
+                        price_factor = factor_normal
+                    elif stock_ratio > ratio_low:
+                        price_factor = factor_low
+                    else:
+                        price_factor = factor_extreme_low
+                    
+                    i_info['price'] = int(base * price_factor)
+                    
+                    # 최소/최대 가격 제한
+                    min_price = int(base * min_price_rate)
+                    if i_info['price'] < min_price:
+                        i_info['price'] = min_price
+                    if i_info['price'] > base * max_price_rate:
+                        i_info['price'] = int(base * max_price_rate)
+                    
+                    print(f"   → price_factor: {price_factor}, 최종가: {i_info['price']}")
+                    
 def get_weight(player, items_info, merc_data):
     cw = 0
     for item, qty in player['inv'].items():
@@ -965,6 +951,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
