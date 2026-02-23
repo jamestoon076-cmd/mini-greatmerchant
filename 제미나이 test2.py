@@ -77,7 +77,7 @@ def connect_gsheet():
 def load_game_data():
     doc = connect_gsheet()
     if not doc:
-        return None, None, None, None, None, None, None
+        return None, None, None, None, None, None  # 6개 반환
     
     try:
         # 설정 데이터 로드
@@ -113,14 +113,13 @@ def load_game_data():
         
         villages = {}
         initial_stocks = {}
-        seen_villages = set()  # 중복 체크를 위한 세트
+        seen_villages = set()
         
         for row in vil_vals[1:]:
             if not row or not row[0].strip():
                 continue
             v_name = row[0].strip()
             
-            # 이미 처리한 마을이면 스킵
             if v_name in seen_villages:
                 continue
             seen_villages.add(v_name)
@@ -162,36 +161,13 @@ def load_game_data():
                     'last_save': r.get('last_save', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
                 })
         
-        # 도시별 설정 데이터 로드
-        city_settings = {}
-        try:
-            city_ws = doc.worksheet("City_Setting_Data")
-            for r in city_ws.get_all_records():
-                city_name = str(r['village_name']).strip()
-                city_settings[city_name] = {
-                    'ratio_extreme_high': float(r.get('ratio_extreme_high', 2.0)),
-                    'ratio_high': float(r.get('ratio_high', 1.5)),
-                    'ratio_above_normal': float(r.get('ratio_above_normal', 1.0)),
-                    'ratio_normal': float(r.get('ratio_normal', 0.7)),
-                    'ratio_low': float(r.get('ratio_low', 0.4)),
-                    'factor_extreme_high': float(r.get('factor_extreme_high', 0.5)),
-                    'factor_high': float(r.get('factor_high', 0.7)),
-                    'factor_above_normal': float(r.get('factor_above_normal', 0.85)),
-                    'factor_normal': float(r.get('factor_normal', 1.0)),
-                    'factor_low': float(r.get('factor_low', 1.3)),
-                    'factor_extreme_low': float(r.get('factor_extreme_low', 2.0)),
-                    'region_discount': float(r.get('region_discount', 1.0)),
-                    'city_premium': float(r.get('city_premium', 1.0)),
-                }
-        except Exception as e:
-            st.warning("City_Setting_Data 시트를 찾을 수 없습니다. 기본값을 사용합니다.")
-            city_settings = {}
+        # ✅ city_settings 관련 코드 모두 제거
         
-        return settings, items_info, merc_data, villages, initial_stocks, slots, city_settings
+        return settings, items_info, merc_data, villages, initial_stocks, slots  # 6개 반환
     
     except Exception as e:
         st.error(f"❌ 데이터 로드 에러: {e}")
-        return None, None, None, None, None, None, None
+        return None, None, None, None, None, None  # 6개 반환
 
 # --- 4. 세션 초기화 함수 ---
 def init_session_state():
@@ -348,25 +324,10 @@ def update_prices(settings, items_info, market_data, initial_stocks=None, city_s
     max_price_rate = settings.get('max_price_rate', 3.0)
     
     for v_name, v_data in market_data.items():
-        # 도시별 설정 가져오기
-        city_set = city_settings.get(v_name, {})
-        
-        ratio_extreme_high = city_set.get('ratio_extreme_high', default_ratio_extreme_high)
-        ratio_high = city_set.get('ratio_high', default_ratio_high)
-        ratio_above_normal = city_set.get('ratio_above_normal', default_ratio_above_normal)
-        ratio_normal = city_set.get('ratio_normal', default_ratio_normal)
-        ratio_low = city_set.get('ratio_low', default_ratio_low)
-        
-        factor_extreme_high = city_set.get('factor_extreme_high', default_factor_extreme_high)
-        factor_high = city_set.get('factor_high', default_factor_high)
-        factor_above_normal = city_set.get('factor_above_normal', default_factor_above_normal)
-        factor_normal = city_set.get('factor_normal', default_factor_normal)
-        factor_low = city_set.get('factor_low', default_factor_low)
-        factor_extreme_low = city_set.get('factor_extreme_low', default_factor_extreme_low)
-        
-        region_discount = city_set.get('region_discount', 1.0)
-        city_premium = city_set.get('city_premium', 1.0)
-        
+        # 용병 고용소는 가격 변동 없음
+        if v_name == "용병 고용소":
+            continue
+            
         for i_name, i_info in v_data.items():
             if i_name in items_info:
                 base = items_info[i_name]['base']
@@ -379,40 +340,22 @@ def update_prices(settings, items_info, market_data, initial_stocks=None, city_s
                 if stock <= 0:
                     i_info['price'] = int(base * max_price_rate)
                 else:
+                    # 재고 비율 계산 (현재 재고 / 초기 재고)
                     stock_ratio = stock / initial_stock
                     
-                    # 도시별 기준값으로 가격 계수 결정
-                    if stock_ratio > ratio_extreme_high:
-                        price_factor = factor_extreme_high
-                    elif stock_ratio > ratio_high:
-                        price_factor = factor_high
-                    elif stock_ratio > ratio_above_normal:
-                        price_factor = factor_above_normal
-                    elif stock_ratio > ratio_normal:
-                        price_factor = factor_normal
-                    elif stock_ratio > ratio_low:
-                        price_factor = factor_low
+                    # ✅ 재고 비율에 따라서만 가격 결정 (지역별 할인 없음)
+                    if stock_ratio > default_ratio_extreme_high:
+                        price_factor = default_factor_extreme_high
+                    elif stock_ratio > default_ratio_high:
+                        price_factor = default_factor_high
+                    elif stock_ratio > default_ratio_above_normal:
+                        price_factor = default_factor_above_normal
+                    elif stock_ratio > default_ratio_normal:
+                        price_factor = default_factor_normal
+                    elif stock_ratio > default_ratio_low:
+                        price_factor = default_factor_low
                     else:
-                        price_factor = factor_extreme_low
-                    
-                    # 지역 특산물 할인
-                    region_discounts = {
-                        "부산": ["생선", "멸치", "굴비", "대구", "명태"],
-                        "제주": ["감귤", "해산물", "돼지고기"],
-                        "강원도": ["감자", "옥수수", "송이버섯"],
-                        "전라도": ["쌀", "배추", "고추"],
-                        "경상도": ["사과", "배", "소고기"],
-                        "충청도": ["인삼", "약초"],
-                        "함흥": ["북어", "명태"],
-                    }
-                    
-                    for region, items in region_discounts.items():
-                        if v_name == region and i_name in items:
-                            price_factor *= region_discount
-                            break
-                    
-                    # 도시 프리미엄 적용
-                    price_factor *= city_premium
+                        price_factor = default_factor_extreme_low
                     
                     i_info['price'] = int(base * price_factor)
                     
@@ -987,6 +930,7 @@ if doc:
         # 0.5초마다 자동 새로고침
         time.sleep(0.5)
         st.rerun()
+
 
 
 
