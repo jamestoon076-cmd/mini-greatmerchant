@@ -523,19 +523,18 @@ if doc:
             
             slot_choice = st.selectbox("슬롯 번호", options=[1, 2, 3], index=0)
             
-           if st.button("🎮 게임 시작", use_container_width=True):
+            if st.button("🎮 게임 시작", use_container_width=True):
                 selected = next((s for s in slots if s['slot'] == slot_choice), None)
                 if selected:
-                st.session_state.player = selected
-                st.session_state.settings = settings
-                st.session_state.items_info = items_info
-                st.session_state.merc_data = merc_data
-                st.session_state.villages = villages
-                st.session_state.initial_stocks = initial_stocks
-                # ✅ city_settings 저장 코드 제거
-                st.session_state.last_time_update = time.time()
-                st.session_state.trade_logs = {}
-                            
+                    st.session_state.player = selected
+                    st.session_state.settings = settings
+                    st.session_state.items_info = items_info
+                    st.session_state.merc_data = merc_data
+                    st.session_state.villages = villages
+                    st.session_state.initial_stocks = initial_stocks
+                    st.session_state.last_time_update = time.time()
+                    st.session_state.trade_logs = {}
+                    
                     market_data = {}
                     for v_name, v_data in villages.items():
                         if v_name != "용병 고용소":
@@ -927,6 +926,7 @@ if doc:
         # 0.5초마다 자동 새로고침
         time.sleep(0.5)
         st.rerun()
+
 
 
 
