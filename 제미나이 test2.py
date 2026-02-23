@@ -300,12 +300,10 @@ def get_time_display(player):
     return f"{player['year']}년 {month_names[player['month']-1]} {player['week']}주차"
 
 # --- 6. 게임 로직 함수들 ---
-def update_prices(settings, items_info, market_data, initial_stocks=None):
-    if initial_stocks is None:
-        initial_stocks = st.session_state.get('initial_stocks', {})
-    
-    # ✅ villages 데이터 직접 가져오기
-    villages = st.session_state.get('villages', {})
+def update_prices(settings, items_info, market_data, villages):
+    """
+    villages: st.session_state.villages (초기재고가 저장된 원본 데이터)
+    """
     
     # 설정값 가져오기
     ratio_extreme_high = settings.get('ratio_extreme_high', 2.0)
@@ -314,15 +312,12 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
     ratio_normal = settings.get('ratio_normal', 0.7)
     ratio_low = settings.get('ratio_low', 0.4)
     
-    factor_extreme_high = settings.get('factor_extreme_high', 0.2)  # 20%로 수정
+    factor_extreme_high = settings.get('factor_extreme_high', 0.2)
     factor_high = settings.get('factor_high', 0.7)
     factor_above_normal = settings.get('factor_above_normal', 0.85)
     factor_normal = settings.get('factor_normal', 1.0)
     factor_low = settings.get('factor_low', 1.3)
     factor_extreme_low = settings.get('factor_extreme_low', 2.0)
-    
-    min_price_rate = settings.get('min_price_rate', 0.4)
-    max_price_rate = settings.get('max_price_rate', 3.0)
     
     for v_name, v_data in market_data.items():
         if v_name == "용병 고용소":
@@ -333,17 +328,14 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
                 base = items_info[i_name]['base']
                 stock = i_info['stock']
                 
-                # ✅ villages에서 초기재고 가져오기 (가장 확실한 방법)
+                # ✅ villages에서 초기재고 가져오기
                 if v_name in villages and i_name in villages[v_name]['items']:
                     initial_stock = villages[v_name]['items'][i_name]
                 else:
                     initial_stock = 100
                 
-                # 디버깅: 터미널에서 확인
-                print(f"🔍 {v_name} {i_name}: 현재={stock}, 초기={initial_stock}, 비율={stock/initial_stock:.2f}")
-                
                 if stock <= 0:
-                    i_info['price'] = int(base * max_price_rate)
+                    i_info['price'] = int(base * 3.0)
                 else:
                     stock_ratio = stock / initial_stock
                     
@@ -361,15 +353,6 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
                         price_factor = factor_extreme_low
                     
                     i_info['price'] = int(base * price_factor)
-                    
-                    # 최소/최대 가격 제한
-                    min_price = int(base * min_price_rate)
-                    if i_info['price'] < min_price:
-                        i_info['price'] = min_price
-                    if i_info['price'] > base * max_price_rate:
-                        i_info['price'] = int(base * max_price_rate)
-                    
-                    print(f"   → price_factor: {price_factor}, 최종가: {i_info['price']}")
                     
 def get_weight(player, items_info, merc_data):
     cw = 0
@@ -951,6 +934,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
