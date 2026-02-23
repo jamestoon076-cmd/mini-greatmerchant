@@ -240,7 +240,7 @@ def update_game_time(player, settings, market_data, initial_stocks):
         return player, []
     
     elapsed = current_time - st.session_state.last_time_update
-    seconds_per_month = 30
+    seconds_per_month = 180
     months_passed = int(elapsed / seconds_per_month)
     
     events = []
@@ -958,6 +958,7 @@ if doc:
         # 0.5초마다 자동 새로고침 (시간 실시간 업데이트)
         time.sleep(0.5)
         st.rerun()
+
 
 
 
