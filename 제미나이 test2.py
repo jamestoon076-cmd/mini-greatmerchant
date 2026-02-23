@@ -2,227 +2,159 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 import json
-import math
-import time
 from datetime import datetime
 
-# --- 1. 페이지 설정 및 커스텀 스타일 ---
-st.set_page_config(page_title="조선거상 미니", page_icon="🏯", layout="centered")
-
-st.markdown("""
-<style>
-    .main { background-color: #f5f7f9; }
-    .stMetric { background-color: white; padding: 10px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-    .price-up { color: #ff4b4b; font-weight: bold; }
-    .price-down { color: #4b7bff; font-weight: bold; }
-    .trade-container { background-color: white; padding: 15px; border-radius: 12px; border: 1px solid #e1e4e8; margin-bottom: 10px; }
-    .village-card { padding: 10px; border-bottom: 1px solid #eee; }
-</style>
-""", unsafe_allow_html=True)
-
-# --- 2. 데이터베이스 연결 (Google Sheets) ---
-@st.cache_resource
-def connect_db():
+# --- 1. 유틸리티 함수 (안전한 숫자 변환) ---
+def safe_int(value, default=0):
+    if value == "" or value is None or str(value).strip() == "":
+        return default
     try:
-        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        creds = Credentials.from_service_account_info(st.secrets["gspread"], scopes=scopes)
-        return gspread.authorize(creds).open("조선거상_DB")
-    except Exception as e:
-        st.error(f"❌ DB 연결 실패: {e}")
-        return None
+        return int(float(value))
+    except ValueError:
+        return default
 
-def load_game_data(doc):
-    try:
-        # 설정 데이터
-        settings = {r['변수명']: float(r['값']) for r in doc.worksheet("Setting_Data").get_all_records() if r.get('변수명')}
-        
-        # 아이템 및 용병 정보
-        items_info = {r['item_name']: {'base': int(r['base_price']), 'w': int(r['weight'])} for r in doc.worksheet("Item_Data").get_all_records()}
-        mercs_data = {r['name']: {'price': int(r['price']), 'w_bonus': int(r.get('weight_bonus', 0))} for r in doc.worksheet("Balance_Data").get_all_records()}
-        
-        # 마을 데이터 로드 (국가별 탭 구분)
-        regions = {}
-        for ws in doc.worksheets():
-            if "_Village_Data" in ws.title:
-                country = ws.title.replace("_Village_Data", "")
-                regions[country] = ws.get_all_records()
-        
-        # 플레이어 데이터
-        player_slots = doc.worksheet("Player_Data").get_all_records()
-        
-        return settings, items_info, mercs_data, regions, player_slots
-    except Exception as e:
-        st.error(f"❌ 데이터 로드 실패: {e}")
-        return None
-
-# --- 3. 핵심 로직: 가격 변동 시스템 ---
+# --- 2. 시세 계산 로직 (가격변동개선.py 기준) ---
 def get_current_price(item_name, current_stock, items_info, settings):
-    """가격변동개선.py의 재고 비율 로직 적용"""
     if item_name not in items_info: return 0
-    
     base = items_info[item_name]['base']
-    # 초기 재고 기준값 (DB에 없을 경우 기본 100)
-    initial_stock = 100 
+    initial_stock = 100 # 기준 재고 (필요시 DB화)
     
     if current_stock <= 0:
         return int(base * settings.get('max_price_rate', 3.0))
     
     stock_ratio = current_stock / initial_stock
-    
-    # 가격변동개선.py의 조건부 배율 적용
-    if stock_ratio < 0.5:
-        price_factor = 2.5
-    elif stock_ratio < 1.0:
-        price_factor = 1.8
-    else:
-        price_factor = 1.0
+    # 재고 비율에 따른 가격 배율
+    if stock_ratio < 0.5: factor = 2.5
+    elif stock_ratio < 1.0: factor = 1.8
+    else: factor = 1.0
         
-    price = int(base * price_factor)
-    
-    # 상하한선 제한
-    min_p = int(base * settings.get('min_price_rate', 0.4))
-    max_p = int(base * settings.get('max_price_rate', 3.0))
-    return max(min_p, min(max_p, price))
+    return int(base * factor)
 
-# --- 4. 메인 게임 루프 ---
-doc = connect_db()
+# --- 3. 데이터 로드 및 앱 시작 ---
+@st.cache_resource
+def get_db():
+    try:
+        creds = Credentials.from_service_account_info(st.secrets["gspread"], 
+            scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
+        return gspread.authorize(creds).open("조선거상_DB")
+    except: return None
+
+doc = get_db()
 if doc:
-    data = load_game_data(doc)
-    if data:
-        settings, items_info, mercs_data, regions, player_slots = data
-        
-        if 'game_started' not in st.session_state:
-            st.session_state.game_started = False
+    # 데이터 프리로딩
+    settings = {r['변수명']: float(r['값']) for r in doc.worksheet("Setting_Data").get_all_records() if r.get('변수명')}
+    items_info = {r['item_name']: {'base': int(r['base_price']), 'w': int(r['weight'])} for r in doc.worksheet("Item_Data").get_all_records()}
+    mercs_db = {r['name']: {'price': int(r['price']), 'w_bonus': int(r.get('weight_bonus', 0))} for r in doc.worksheet("Balance_Data").get_all_records()}
+    
+    # 마을 데이터 (국가별 시트가 없을 경우 기본 Village_Data 시트 사용)
+    all_villages = doc.worksheet("Village_Data").get_all_records()
+    
+    # 세션 관리
+    if 'player' not in st.session_state:
+        # 로그인/슬롯 선택 로직 (간략화)
+        p_data = doc.worksheet("Player_Data").get_all_records()[0] # 1번 슬롯 예시
+        st.session_state.player = {
+            'slot': p_data['slot'], 'money': int(p_data['money']), 'pos': p_data['pos'],
+            'mercs': json.loads(p_data['mercs']) if p_data['mercs'] else [],
+            'inv': json.loads(p_data['inventory']) if p_data['inventory'] else {}
+        }
 
-        # [화면 1: 슬롯 선택]
-        if not st.session_state.game_started:
-            st.title("🏯 조선거상: 대륙의 시작")
-            cols = st.columns(len(player_slots[:3]))
-            for i, p in enumerate(player_slots[:3]):
-                with cols[i]:
-                    st.markdown(f"""<div class="stMetric">
-                    <b>💾 슬롯 {p['slot']}</b><br>
-                    📍 {p.get('pos','한양')}<br>
-                    💰 {int(p.get('money',0)):,}냥</div>""", unsafe_allow_html=True)
-                    if st.button(f"{p['slot']}번 접속", key=f"btn_{i}"):
-                        st.session_state.player = {
-                            'slot': p['slot'],
-                            'money': int(p.get('money', 10000)),
-                            'pos': p.get('pos', '한양'),
-                            'inv': json.loads(p['inventory']) if p.get('inventory') else {},
-                            'mercs': json.loads(p['mercs']) if p.get('mercs') else [],
-                            'year': int(p.get('year', 1592)), 'month': int(p.get('month', 1))
-                        }
-                        st.session_state.game_started = True
-                        st.rerun()
+    p = st.session_state.player
 
-        # [화면 2: 인게임 모드]
+    # --- UI 레이아웃 ---
+    st.title(f"🏯 조선거상 ({p['pos']})")
+    
+    # 상단 상태바
+    curr_w = sum(p['inv'].get(it, 0) * items_info[it]['w'] for it in p['inv'] if it in items_info)
+    max_w = 200 + sum(mercs_db[m]['w_bonus'] for m in p['mercs'] if m in mercs_db)
+    
+    col_stat1, col_stat2 = st.columns(2)
+    col_stat1.metric("💰 소지금", f"{p['money']:,}냥")
+    col_stat2.metric("⚖️ 상단 무게", f"{curr_w} / {max_w} 근")
+
+    tab1, tab2, tab3, tab4 = st.tabs(["🛒 저잣거리", "🚩 이동", "👨‍전 상단 정보", "⚔️ 고용소"])
+
+    # [TAB 1: 저잣거리]
+    with tab1:
+        v_data = next((v for v in all_villages if v['village_name'] == p['pos']), None)
+        if v_data and p['pos'] != "용병 고용소":
+            st.subheader(f"🏬 {p['pos']} 상점")
+            for item in items_info.keys():
+                stock = safe_int(v_data.get(item, 0))
+                price = get_current_price(item, stock, items_info, settings)
+                
+                with st.expander(f"{item} (가격: {price:,}냥 | 재고: {stock}개)"):
+                    qty = st.number_input("수량", min_value=1, max_value=max(1, stock), key=f"q_{item}")
+                    c_b, c_s = st.columns(2)
+                    if c_b.button("매수", key=f"buy_{item}"):
+                        if p['money'] >= price * qty and curr_w + (items_info[item]['w'] * qty) <= max_w:
+                            p['money'] -= price * qty
+                            p['inv'][item] = p['inv'].get(item, 0) + qty
+                            st.rerun()
+                        else: st.error("자금 또는 무게 부족!")
         else:
-            p = st.session_state.player
-            
-            # 상단 상태바
-            st.header(f"📍 {p['pos']}")
-            c1, c2, c3 = st.columns(3)
-            c1.metric("💰 소지금", f"{p['money']:,}냥")
-            
-            # 무게 계산
-            curr_w = sum(p['inv'].get(it, 0) * items_info[it]['w'] for it in p['inv'] if it in items_info)
-            max_w = 200 + sum(mercs_data[m]['w_bonus'] for m in p['mercs'] if m in mercs_data)
-            c2.metric("⚖️ 무게", f"{curr_w}/{max_w}근")
-            c3.metric("📅 일시", f"{p['year']}년 {p['month']}월")
+            st.info("이곳에는 상점이 없습니다. 다른 마을로 이동하세요.")
 
-            tab1, tab2, tab3, tab4 = st.tabs(["🛒 저잣거리", "🚩 팔도강산", "⚔️ 용병단", "💾 시스템"])
+    # [TAB 2: 이동 (용병 고용소 -> 저잣거리 문제 해결)]
+    with tab2:
+        st.subheader("🚩 팔도강산 이동")
+        # 현재 위치를 제외한 모든 마을 목록 표시
+        for v in all_villages:
+            if v['village_name'] == p['pos']: continue
+            col_v, col_m = st.columns([3, 1])
+            col_v.write(f"**{v['village_name']}**")
+            if col_m.button("이동하기", key=f"mv_{v['village_name']}"):
+                p['pos'] = v['village_name']
+                st.rerun()
 
-            with tab1: # 거래 (가격변동개선 로직 적용)
-                # 현재 마을의 재고 데이터 찾기
-                v_row = next((r for rs in regions.values() for r in rs if r['village_name'] == p['pos']), None)
-                
-                if v_row:
-                    for item_name, info in items_info.items():
-                        # --- 수정 후 (안전한 방식) ---
-                        raw_stock = v_row.get(item_name, 0)
-                        
-                        # 값이 없거나 공백 문자열인 경우 0으로 처리, 그 외에는 숫자로 변환
-                        if raw_stock == "" or raw_stock is None:
-                            stock = 0
-                        else:
-                            try:
-                                stock = int(raw_stock)
-                            except ValueError:
-                                stock = 0 # 숫자가 아닌 값이 들어있을 경우 예외 처리
-                        
-                        price = get_current_price(item_name, stock, items_info, settings)
-                        
-                        with st.container():
-                            col_info, col_trade = st.columns([2, 2])
-                            with col_info:
-                                st.markdown(f"**{item_name}**")
-                                st.markdown(f"가격: `{price:,}냥` | 재고: `{stock}개`")
-                            
-                            with col_trade:
-                                qty = st.number_input("수량", min_value=1, max_value=max(1, stock), key=f"q_{item_name}")
-                                b_col, s_col = st.columns(2)
-                                if b_col.button("매수", key=f"b_{item_name}"):
-                                    if p['money'] >= price * qty and curr_w + (info['w'] * qty) <= max_w:
-                                        p['money'] -= price * qty
-                                        p['inv'][item_name] = p['inv'].get(item_name, 0) + qty
-                                        st.success(f"{item_name} {qty}개 매수 완료")
-                                        st.rerun()
-                                    else: st.error("자금 또는 무게 부족")
-                                
-                                if s_col.button("매도", key=f"s_{item_name}"):
-                                    if p['inv'].get(item_name, 0) >= qty:
-                                        p['money'] += price * qty
-                                        p['inv'][item_name] -= qty
-                                        st.success(f"{item_name} {qty}개 매도 완료")
-                                        st.rerun()
-                                    else: st.error("수량 부족")
-                    st.divider()
+    # [TAB 3: 상단 정보 (인벤토리 및 용병 해고)]
+    with tab3:
+        st.subheader("📦 내 상단 정보")
+        
+        # 1. 인벤토리 섹션
+        st.write("**[소지 물품]**")
+        inv_items = {k: v for k, v in p['inv'].items() if v > 0}
+        if inv_items:
+            for it, count in inv_items.items():
+                st.write(f"- {it}: {count}개 ({items_info[it]['w'] * count}근)")
+        else:
+            st.caption("가방이 비어있습니다.")
+        
+        st.divider()
+        
+        # 2. 용병단 섹션 (해고 기능)
+        st.write("**[우리 용병단]**")
+        if p['mercs']:
+            for idx, m_name in enumerate(p['mercs']):
+                col_m_info, col_m_btn = st.columns([3, 1])
+                col_m_info.write(f"{idx+1}. {m_name} (+{mercs_db[m_name]['w_bonus']}근)")
+                if col_m_btn.button("해고", key=f"fire_{idx}"):
+                    # 해고 시 무게 체크 (현재 짐이 너무 많으면 해고 불가)
+                    potential_max_w = max_w - mercs_db[m_name]['w_bonus']
+                    if curr_w > potential_max_w:
+                        st.error("짐이 너무 무거워 용병을 보낼 수 없습니다!")
+                    else:
+                        p['mercs'].pop(idx)
+                        st.success(f"{m_name}을(를) 해고했습니다.")
+                        st.rerun()
+        else:
+            st.caption("고용된 용병이 없습니다.")
 
-            with tab2: # 국가별 이동 (UI개선 탭 방식)
-                countries = list(regions.keys())
-                selected_country_tabs = st.tabs(countries)
-                for i, country in enumerate(countries):
-                    with selected_country_tabs[i]:
-                        for v in regions[country]:
-                            if v['village_name'] == p['pos']: continue
-                            col_v, col_m = st.columns([3, 1])
-                            col_v.write(f"**{v['village_name']}**")
-                            if col_m.button("이동", key=f"move_{v['village_name']}"):
-                                p['pos'] = v['village_name']
-                                st.rerun()
-
-            with tab3: # 용병 (가격변동개선 로직)
-                st.subheader("⚔️ 용병 고용소")
-                max_mercs = int(settings.get('max_mercenaries', 5))
-                st.write(f"고용 현황: {len(p['mercs'])} / {max_mercs}")
-                
-                for m_name, m_info in mercs_data.items():
-                    with st.container():
-                        col1, col2 = st.columns([3, 1])
-                        col1.write(f"**{m_name}** (💰 {m_info['price']:,}냥 | ⚖️ 무게 +{m_info['w_bonus']}근)")
-                        if col2.button("고용", key=f"hire_{m_name}"):
-                            if len(p['mercs']) < max_mercs and p['money'] >= m_info['price']:
-                                p['money'] -= m_info['price']
-                                p['mercs'].append(m_name)
-                                st.rerun()
-                            else: st.error("조건 부족")
-
-            with tab4: # 저장 및 기타
-                if st.button("💾 게임 데이터 저장", use_container_width=True):
-                    ws = doc.worksheet("Player_Data")
-                    row_idx = p['slot'] + 1
-                    save_values = [
-                        p['slot'], p['money'], p['pos'], 
-                        json.dumps(p['mercs'], ensure_ascii=False),
-                        json.dumps(p['inv'], ensure_ascii=False),
-                        datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                        1, p['month'], p['year']
-                    ]
-                    ws.update(f'A{row_idx}:I{row_idx}', [save_values])
-                    st.success("데이터가 클라우드에 저장되었습니다!")
-                
-                if st.button("🚪 타이틀로 돌아가기", use_container_width=True):
-                    st.session_state.game_started = False
-                    st.rerun()
-
+    # [TAB 4: 고용소]
+    with tab4:
+        if p['pos'] == "용병 고용소":
+            st.subheader("⚔️ 용병 고용")
+            for m_name, info in mercs_db.items():
+                col1, col2 = st.columns([3, 1])
+                col1.write(f"**{m_name}** (💰 {info['price']:,}냥)")
+                if col2.button("고용하기", key=f"hire_{m_name}"):
+                    if len(p['mercs']) < settings.get('max_mercenaries', 5) and p['money'] >= info['price']:
+                        p['money'] -= info['price']
+                        p['mercs'].append(m_name)
+                        st.rerun()
+                    else: st.error("고용 불가 (인원 초과 또는 자금 부족)")
+        else:
+            st.warning("용병 고용은 '용병 고용소' 마을에서만 가능합니다.")
+            if st.button("용병 고용소로 즉시 이동"):
+                p['pos'] = "용병 고용소"
+                st.rerun()
