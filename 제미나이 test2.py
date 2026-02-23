@@ -910,7 +910,7 @@ if doc:
             
             st.metric("거래 횟수", f"{stats['trade_count']}회")
         
-        with tab5:
+                with tab5:
             st.subheader("⚙️ 게임 메뉴")
             
             st.write("**🚚 마을 이동**")
@@ -928,13 +928,13 @@ if doc:
                         move_options.append(option_text)
                         move_dict[option_text] = (t, cost)
                 
-                  if move_options:
+                if move_options:
                     selected = st.selectbox("이동할 마을", move_options)
                     if st.button("🚀 이동", use_container_width=True):
                         dest, cost = move_dict[selected]
                         if player['money'] >= cost:
                             player['money'] -= cost
-                            # ✅ 현재 도시의 로그 삭제 (이동 전 도시)
+                            # 현재 도시의 로그 삭제 (이동 전 도시)
                             current_city = player['pos']
                             keys_to_delete = []
                             for key in list(st.session_state.trade_logs.keys()):
@@ -974,10 +974,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
-        
-        # 0.5초마다 자동 새로고침 (시간 실시간 업데이트)
-        time.sleep(0.5)
-        st.rerun()
+
 
 
 
