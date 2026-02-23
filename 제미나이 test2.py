@@ -244,4 +244,33 @@ if data[0]:
                             update_prices(settings, items_info, market, st.session_state.initial_stocks)
                             st.success("매도 완료!")
                             st.rerun()
-                        else: st.error("
+                        else: st.error("아이템 부족")
+
+        with tab2:
+            st.subheader("다른 마을로 이동")
+            for dest, d_info in villages.items():
+                if dest == curr_pos: continue
+                dist = math.sqrt((villages[curr_pos]['x']-d_info['x'])**2 + (villages[curr_pos]['y']-d_info['y'])**2)
+                cost = int(dist * settings.get('travel_cost', 15))
+                if st.button(f"{dest} ({cost}냥 / {int(dist)}리)", key=f"go_{dest}"):
+                    if player['money'] >= cost:
+                        player['money'] -= cost
+                        player['pos'] = dest
+                        st.success(f"{dest}로 이동 중...")
+                        time.sleep(1)
+                        st.rerun()
+                    else: st.error("돈이 부족합니다.")
+
+        with tab3:
+            st.write(f"**보유 용병:** {', '.join(player['mercs']) if player['mercs'] else '없음'}")
+            st.write("**내 가방:**")
+            for k, v in player['inventory'].items():
+                if v > 0: st.write(f"- {k}: {v}개")
+            
+            if st.button("💾 데이터 저장"):
+                if save_player_data(doc, player, st.session_state.stats, get_device_id()):
+                    st.success("저장되었습니다!")
+
+        if st.button("🚪 메인으로"):
+            st.session_state.game_started = False
+            st.rerun()
