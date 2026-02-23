@@ -103,6 +103,7 @@ def load_game_data():
                     'w_bonus': int(r.get('weight_bonus', 0))
                 }
         
+        # 마을 데이터 로드 부분 수정
         vil_ws = doc.worksheet("Village_Data")
         vil_vals = vil_ws.get_all_values()
         headers = [h.strip() for h in vil_vals[0]]
@@ -114,6 +115,11 @@ def load_game_data():
             if not row or not row[0].strip():
                 continue
             v_name = row[0].strip()
+            
+            # 이미 존재하는 마을이면 스킵 (중복 제거)
+            if v_name in villages:
+                continue
+                
             try:
                 x = int(row[1]) if len(row) > 1 and row[1] else 0
                 y = int(row[2]) if len(row) > 2 and row[2] else 0
@@ -880,6 +886,7 @@ if doc:
         # 0.5초마다 자동 새로고침 (시간 실시간 업데이트)
         time.sleep(0.5)
         st.rerun()
+
 
 
 
