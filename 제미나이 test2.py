@@ -334,9 +334,10 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
             continue
             
         for i_name, i_info in v_data.items():
-            if i_name in items_info:
-                base = items_info[i_name]['base']
-                    stock = i_info['stock']
+                    if i_name in items_info:
+                        base = items_info[i_name]['base']
+                        stock = i_info['stock']
+                        
                         # 🔥 강제로 숫자로 변환
                         try:
                             stock = int(stock)
@@ -349,42 +350,40 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
                             initial_stock = int(initial_stock)
                         except:
                             initial_stock = 100
-                
-                if stock <= 0:
-                    i_info['price'] = int(base * max_price_rate)
-                else:
-                    stock_ratio = stock / initial_stock
-                    print(f"   비율={stock_ratio:.2f}")
-                    
-                    # 재고 비율에 따른 가격 계수 결정
-                    if stock_ratio > ratio_extreme_high:
-                        price_factor = factor_extreme_high
-                        print(f"   → 극단적 과다: {price_factor}")
-                    elif stock_ratio > ratio_high:
-                        price_factor = factor_high
-                        print(f"   → 과다: {price_factor}")
-                    elif stock_ratio > ratio_above_normal:
-                        price_factor = factor_above_normal
-                        print(f"   → 약간 과다: {price_factor}")
-                    elif stock_ratio > ratio_normal:
-                        price_factor = factor_normal
-                        print(f"   → 적정: {price_factor}")
-                    elif stock_ratio > ratio_low:
-                        price_factor = factor_low
-                        print(f"   → 부족: {price_factor}")
-                    else:
-                        price_factor = factor_extreme_low
-                        print(f"   → 극단적 부족: {price_factor}")
-                    
-                    i_info['price'] = int(base * price_factor)
-                    print(f"   → 최종가격: {i_info['price']} (기준가: {base})\n")
-                    
-                    # 최소/최대 가격 제한
-                    min_price = int(base * min_price_rate)
-                    if i_info['price'] < min_price:
-                        i_info['price'] = min_price
-                    if i_info['price'] > base * max_price_rate:
-                        i_info['price'] = int(base * max_price_rate)
+                        
+                        # 디버깅: 실제 초기재고 값 확인
+                        print(f"🔍 {v_name} {i_name}: 현재재고={stock}, 초기재고={initial_stock}, 비율={stock/initial_stock if initial_stock>0 else 0}")
+                        
+                        if initial_stock <= 0:
+                            initial_stock = 100
+                        
+                        if stock <= 0:
+                            i_info['price'] = int(base * max_price_rate)
+                        else:
+                            stock_ratio = stock / initial_stock
+                            
+                            # 재고 비율에 따른 가격 계수 결정
+                            if stock_ratio > ratio_extreme_high:
+                                price_factor = factor_extreme_high
+                            elif stock_ratio > ratio_high:
+                                price_factor = factor_high
+                            elif stock_ratio > ratio_above_normal:
+                                price_factor = factor_above_normal
+                            elif stock_ratio > ratio_normal:
+                                price_factor = factor_normal
+                            elif stock_ratio > ratio_low:
+                                price_factor = factor_low
+                            else:
+                                price_factor = factor_extreme_low
+                            
+                            i_info['price'] = int(base * price_factor)
+                            
+                            # 최소/최대 가격 제한
+                            min_price = int(base * min_price_rate)
+                            if i_info['price'] < min_price:
+                                i_info['price'] = min_price
+                            if i_info['price'] > base * max_price_rate:
+                                i_info['price'] = int(base * max_price_rate)
 
 def get_weight(player, items_info, merc_data):
     cw = 0
@@ -966,6 +965,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
