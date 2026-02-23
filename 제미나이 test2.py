@@ -7,211 +7,242 @@ import time
 from datetime import datetime
 
 # --- 1. 페이지 설정 ---
-st.set_page_config(page_title="조선거상 미니", page_icon="🏯", layout="centered")
+st.set_page_config(page_title="조선거상 미니", page_icon="🏯", layout="wide")
 
 st.markdown("""
 <style>
-    .slot-container { background-color: #ffffff; padding: 20px; border-radius: 15px; border: 1px solid #e1e4e8; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-    .stButton button { width: 100%; font-weight: bold; }
-    .log-box { background-color: #1e1e1e; color: #00ff00; padding: 15px; border-radius: 5px; font-family: 'Courier New', Courier, monospace; font-size: 0.9em; line-height: 1.5; }
-    .inventory-card { background-color: #f1f3f5; padding: 10px; border-radius: 8px; border-left: 5px solid #495057; margin-bottom: 5px; }
+    .stButton button { width: 100%; height: 3em; font-weight: bold; }
+    .log-box { background-color: #1e1e1e; color: #00ff00; padding: 15px; border-radius: 5px; font-family: 'Courier New'; font-size: 0.9em; min-height: 200px; overflow-y: auto; }
+    .inventory-card { background-color: #f1f3f5; padding: 10px; border-radius: 8px; border-left: 5px solid #2c3e50; margin-bottom: 5px; }
+    .stat-header { background: #2c3e50; color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. 데이터 연동 (캐싱) ---
+# --- 2. 데이터베이스 연동 ---
 @st.cache_resource
 def get_gsheet_client():
     try:
         creds = Credentials.from_service_account_info(st.secrets["gspread"], 
             scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
         return gspread.authorize(creds).open("조선거상_DB")
-    except: return None
+    except Exception as e:
+        st.error(f"DB 연결 실패: {e}")
+        return None
 
-def load_all_data():
+def load_data():
     doc = get_gsheet_client()
     if not doc: return None
     try:
-        settings = {r['변수명']: float(r['값']) for r in doc.worksheet("Setting_Data").get_all_records() if r.get('변수명')}
+        # 엑셀 데이터 로드
+        settings = {r['변수명']: float(r['값']) for r in doc.worksheet("Setting_Data").get_all_records()}
         items_info = {r['item_name']: {'base': int(r['base_price']), 'w': int(r['weight'])} for r in doc.worksheet("Item_Data").get_all_records()}
-        mercs_data = {r['name']: {'price': int(r['price']), 'weight_bonus': int(r['weight_bonus'])} for r in doc.worksheet("Balance_Data").get_all_records()}
-        
-        regions = {}
-        item_max_stocks = {name: 0 for name in items_info.keys()}
-        for ws in doc.worksheets():
-            if "_Village_Data" in ws.title:
-                country = ws.title.replace("_Village_Data", "")
-                rows = ws.get_all_records()
-                regions[country] = rows
-                for row in rows:
-                    for item, stock in row.items():
-                        if item in item_max_stocks:
-                            try: val = int(stock)
-                            except: val = 0
-                            item_max_stocks[item] = max(item_max_stocks[item], val)
-        
+        mercs_info = {r['name']: {'price': int(r['price']), 'w_bonus': int(r['weight_bonus'])} for r in doc.worksheet("Balance_Data").get_all_records()}
+        villages = doc.worksheet("Village_Data").get_all_records()
         player_slots = doc.worksheet("Player_Data").get_all_records()
-        return doc, settings, items_info, mercs_data, regions, item_max_stocks, player_slots
+        
+        # 가격 계산을 위한 최대 재고 산출
+        item_max_stocks = {name: 0 for name in items_info.keys()}
+        for v in villages:
+            for item in items_info.keys():
+                try: item_max_stocks[item] = max(item_max_stocks[item], int(v.get(item, 0)))
+                except: pass
+        
+        return doc, settings, items_info, mercs_info, villages, item_max_stocks, player_slots
     except Exception as e:
-        st.error(f"데이터 로딩 오류: {e}")
+        st.error(f"데이터 파싱 오류: {e}")
         return None
 
-# --- 3. 핵심 로직 함수 ---
-def calculate_price(item_name, stock, item_max_stocks, items_info, settings):
+# --- 3. 핵심 엔진 함수 ---
+def calculate_price(item_name, current_stock, max_stock, items_info, settings):
     base = items_info[item_name]['base']
-    max_s = item_max_stocks.get(item_name, 100)
     vol = settings.get('volatility', 5000) / 1000
-    curr_s = int(stock) if str(stock).isdigit() and int(stock) > 0 else 1
-    ratio = max_s / curr_s
+    stock_val = max(1, int(current_stock))
+    ratio = max_stock / stock_val
     factor = math.pow(ratio, (vol / 4))
     return int(base * max(0.5, min(20.0, factor)))
 
-def get_current_weight(player_inv, items_info):
-    return sum(count * items_info.get(item, {}).get('w', 0) for item, count in player_inv.items())
+def get_status(player, items_info, mercs_info):
+    curr_w = sum(count * items_info.get(item, {}).get('w', 0) for item, count in player['inventory'].items())
+    max_w = 1000 + sum(mercs_info.get(m, {}).get('w_bonus', 0) for m in player['mercs'])
+    return curr_w, max_w
 
-def get_max_weight(player_mercs, mercs_data):
-    base_weight = 1000 # 플레이어 기본 무게
-    bonus = sum(mercs_data.get(m, {}).get('weight_bonus', 0) for m in player_mercs)
-    return base_weight + bonus
-
-# --- 4. 메인 실행 ---
-data = load_all_data()
-if data:
-    doc, settings, items_info, mercs_data, regions, item_max_stocks, player_slots = data
+# --- 4. 메인 실행 루프 ---
+data_bundle = load_data()
+if data_bundle:
+    doc, settings, items_info, mercs_info, villages, item_max_stocks, player_slots = data_bundle
 
     if 'game_started' not in st.session_state: st.session_state.game_started = False
 
+    # [화면 A: 슬롯 선택]
     if not st.session_state.game_started:
-        # [슬롯 선택 화면 생략 - 기존 코드와 동일]
-        st.title("🏯 거상: 대륙의 시작")
+        st.title("🏯 조선거상: 대륙의 시작")
+        cols = st.columns(len(player_slots))
         for i, p in enumerate(player_slots):
-            slot_id = i + 1
-            with st.container():
-                st.markdown(f"""<div class="slot-container"><b>💾 슬롯 {slot_id}</b><br>
-                📍 현재 위치: {p.get('pos','한양')} | 💰 소지금: {int(p.get('money',0)):,}냥</div>""", unsafe_allow_html=True)
-                if st.button(f"슬롯 {slot_id} 접속", key=f"slot_{slot_id}"):
+            with cols[i]:
+                st.markdown(f"""<div class="slot-container"><b>💾 슬롯 {i+1}</b><br>
+                📍 위치: {p['pos']}<br>💰 {int(p['money']):,}냥</div>""", unsafe_allow_html=True)
+                if st.button(f"슬롯 {i+1} 시작", key=f"s_{i}"):
                     st.session_state.player = {
-                        'money': int(p.get('money', 10000)),
-                        'pos': p.get('pos', '한양'),
-                        'inventory': json.loads(p['inventory']) if p.get('inventory') and p['inventory'] != "{}" else {},
-                        'mercs': json.loads(p['mercs']) if p.get('mercs') and p['mercs'] != "[]" else []
+                        'money': int(p['money']),
+                        'pos': p['pos'],
+                        'inventory': json.loads(p['inventory']) if p['inventory'] else {},
+                        'mercs': json.loads(p['mercs']) if p['mercs'] else []
                     }
-                    st.session_state.slot_num = slot_id
+                    st.session_state.slot_num = i + 1
                     st.session_state.game_started = True
                     st.rerun()
+
+    # [화면 B: 인게임]
     else:
         player = st.session_state.player
-        curr_w = get_current_weight(player['inventory'], items_info)
-        max_w = get_max_weight(player['mercs'], mercs_data)
-        
-        st.header(f"📍 {player['pos']}")
-        st.subheader(f"💰 소지금: {player['money']:,}냥 | ⚖️ 무게: {curr_w:,} / {max_w:,}")
+        curr_w, max_w = get_status(player, items_info, mercs_info)
 
-        tab1, tab2, tab3, tab4 = st.tabs(["🛒 저잣거리", "🚩 이동", "👤 상단 정보", "⚔️ 주막(용병)"])
+        # 상단 정보 UI
+        st.markdown(f"""<div class="stat-header">
+            <h2 style='margin:0;'>📍 {player['pos']} 상단</h2>
+            <b>소지금:</b> {player['money']:,}냥 | <b>무게:</b> {curr_w:,} / {max_w:,}
+        </div>""", unsafe_allow_html=True)
 
-        with tab1: # 장터 (실시간 매매 + 무게 제한)
-            v_data = next((v for r in regions.values() for v in r if v['village_name'] == player['pos']), None)
+        tab1, tab2, tab3, tab4 = st.tabs(["🛒 저잣거리", "🚩 이동", "👤 상단정보", "⚔️ 주막"])
+
+        with tab1: # 저잣거리 (실시간 매매 시스템)
+            v_data = next((v for v in villages if v['village_name'] == player['pos']), None)
             if v_data:
-                for item_name in items_info.keys():
-                    stock = v_data.get(item_name, 0)
-                    price = calculate_price(item_name, stock, item_max_stocks, items_info, settings)
+                # 아이템 리스트 출력
+                for item in items_info.keys():
+                    stock = int(v_data.get(item, 0))
+                    price = calculate_price(item, stock, item_max_stocks[item], items_info, settings)
                     c1, c2, c3 = st.columns([2, 1, 1])
-                    c1.write(f"**{item_name}** ({stock}개)")
-                    c2.write(f"{price:,}냥")
-                    if c3.button("선택", key=f"sel_{item_name}"):
-                        st.session_state.active_trade = {'name': item_name}
+                    c1.write(f"**{item}** (재고: {stock:,})")
+                    c2.write(f"시세: {price:,}냥")
+                    if c3.button("거래 선택", key=f"t_{item}"):
+                        st.session_state.active_trade = item
                 
+                # 상세 거래창
                 if 'active_trade' in st.session_state:
-                    at_name = st.session_state.active_trade['name']
+                    at_item = st.session_state.active_trade
                     st.divider()
-                    st.markdown(f"### 📦 {at_name} 거래 중 (단위 무게: {items_info[at_name]['w']})")
-                    target_amt = st.number_input("거래 희망 수량", 1, 100000, 100)
+                    st.subheader(f"📦 {at_item} 거래 진행")
+                    t_amt = st.number_input("거래 희망 수량", 1, 100000, 100, step=100)
                     
                     b_col, s_col = st.columns(2)
                     log_placeholder = st.empty()
 
+                    # --- 매수 루프 ---
                     if b_col.button("일괄 매수 시작"):
                         total_cost, current_got = 0, 0
-                        logs = [f"구매 수량 >> {target_amt}"]
-                        while current_got < target_amt:
-                            # 실시간 상태 체크
-                            curr_stock = v_data.get(at_name, 0)
-                            dynamic_price = calculate_price(at_name, curr_stock, item_max_stocks, items_info, settings)
-                            item_w = items_info[at_name]['w']
+                        logs = [f"구매 수량 >> {t_amt}"]
+                        while current_got < t_amt:
+                            # 0. 실시간 가격 및 무게 체크
+                            cur_s = int(v_data[at_item])
+                            p_now = calculate_price(at_item, cur_s, item_max_stocks[at_item], items_info, settings)
+                            i_w = items_info[at_item]['w']
                             
-                            batch = min(100, target_amt - current_got)
-                            # 무게 제한 체크
-                            if get_current_weight(player['inventory'], items_info) + (batch * item_w) > max_w:
-                                # 남은 무게만큼만 batch 조정
-                                remaining_w = max_w - get_current_weight(player['inventory'], items_info)
-                                batch = max(0, int(remaining_w // item_w))
-                                if batch <= 0: logs.append("⚠️ 무게가 가득 차서 더 이상 구매할 수 없습니다."); break
+                            batch = min(100, t_amt - current_got)
                             
-                            if curr_stock < batch:
-                                batch = curr_stock
-                                if batch <= 0: logs.append("❌ 마을 재고 부족"); break
+                            # 제한 조건 확인
+                            if (get_status(player, items_info, mercs_info)[0] + (batch * i_w)) > max_w:
+                                batch = max(0, int((max_w - get_status(player, items_info, mercs_info)[0]) // i_w))
+                                if batch <= 0: logs.append("⚠️ 무게가 가득 찼습니다."); break
+                            if cur_s < batch: batch = cur_s
+                            if batch <= 0: logs.append("❌ 재고가 부족합니다."); break
+                            if player['money'] < (p_now * batch): logs.append("❌ 자금이 부족합니다."); break
 
-                            step_cost = dynamic_price * batch
-                            if player['money'] < step_cost: logs.append("❌ 소지금 부족"); break
-                            
-                            # 체결 처리
-                            player['money'] -= step_cost
-                            player['inventory'][at_name] = player['inventory'].get(at_name, 0) + batch
-                            v_data[at_name] -= batch
+                            # 체결 실행
+                            cost = p_now * batch
+                            player['money'] -= cost
+                            player['inventory'][at_item] = player['inventory'].get(at_item, 0) + batch
+                            v_data[at_item] -= batch # 로컬 재고 갱신
                             current_got += batch
-                            total_cost += step_cost
+                            total_cost += cost
                             
-                            logs.append(f"➤ {current_got}/{target_amt} 구매 중... (체결가: {dynamic_price:,}냥 / 무게: {get_current_weight(player['inventory'], items_info):,})")
-                            log_placeholder.markdown(f'<div class="log-box">{"<br>".join(logs[-5:])}</div>', unsafe_allow_html=True)
-                            time.sleep(0.3)
+                            logs.append(f"➤ {current_got}/{t_amt} 구매 중... (체결가: {p_now:,} / 평균가: {int(total_cost/current_got):,})")
+                            log_placeholder.markdown(f'<div class="log-box">{"<br>".join(logs[-6:])}</div>', unsafe_allow_html=True)
+                            time.sleep(0.3) # 0.3초 간격
                         
-                        logs.append(f"✅ 총 {current_got}개 구매 완료했습니다.")
-                        log_placeholder.markdown(f'<div class="log-box">{"<br>".join(logs[-6:])}</div>', unsafe_allow_html=True)
+                        # DB 반영
+                        doc.worksheet("Village_Data").update_cell(villages.index(v_data)+2, list(v_data.keys()).index(at_item)+1, v_data[at_item])
+                        logs.append(f"✅ 총 {current_got}개 구매 완료 (재고 DB 동기화 완료)")
+                        log_placeholder.markdown(f'<div class="log-box">{"<br>".join(logs[-7:])}</div>', unsafe_allow_html=True)
 
+                    # --- 매도 루프 ---
                     if s_col.button("일괄 매도 시작"):
                         total_rev, current_sold = 0, 0
-                        my_stock = player['inventory'].get(at_name, 0)
-                        actual_target = min(target_amt, my_stock)
-                        logs = [f"판매 수량 >> {actual_target}"]
-                        while current_sold < actual_target:
-                            curr_stock = v_data.get(at_name, 0)
-                            dynamic_price = calculate_price(at_name, curr_stock, item_max_stocks, items_info, settings)
+                        my_stock = player['inventory'].get(at_item, 0)
+                        act_target = min(t_amt, my_stock)
+                        logs = [f"판매 수량 >> {act_target}"]
+                        while current_sold < act_target:
+                            cur_s = int(v_data[at_item])
+                            p_now = calculate_price(at_item, cur_s, item_max_stocks[at_item], items_info, settings)
                             
-                            batch = min(100, actual_target - current_sold)
-                            step_rev = dynamic_price * batch
+                            batch = min(100, act_target - current_sold)
+                            rev = p_now * batch
                             
-                            player['money'] += step_rev
-                            player['inventory'][at_name] -= batch
-                            v_data[at_name] += batch
+                            player['money'] += rev
+                            player['inventory'][at_item] -= batch
+                            v_data[at_item] += batch
                             current_sold += batch
-                            total_rev += step_rev
+                            total_rev += rev
                             
-                            logs.append(f"➤ {current_sold}/{actual_target} 판매 중... (체결가: {dynamic_price:,}냥)")
-                            log_placeholder.markdown(f'<div class="log-box">{"<br>".join(logs[-5:])}</div>', unsafe_allow_html=True)
+                            logs.append(f"➤ {current_sold}/{act_target} 판매 중... (체결가: {p_now:,})")
+                            log_placeholder.markdown(f'<div class="log-box">{"<br>".join(logs[-6:])}</div>', unsafe_allow_html=True)
                             time.sleep(0.3)
-                        logs.append(f"✅ 총 {current_sold}개 판매 완료했습니다.")
-                        log_placeholder.markdown(f'<div class="log-box">{"<br>".join(logs[-6:])}</div>', unsafe_allow_html=True)
 
-        with tab2: # 이동 (기존과 동일)
-             # ... [이동 탭 코드] ...
-             pass
+                        doc.worksheet("Village_Data").update_cell(villages.index(v_data)+2, list(v_data.keys()).index(at_item)+1, v_data[at_item])
+                        logs.append(f"✅ 총 {current_sold}개 판매 완료 (시세 DB 반영됨)")
+                        log_placeholder.markdown(f'<div class="log-box">{"<br>".join(logs[-7:])}</div>', unsafe_allow_html=True)
 
-        with tab3: # 상단 정보 (인벤토리 UI)
-            st.subheader(f"👤 {player['pos']} 상단 정보")
-            st.write(f"⚖️ **상단 총 무게:** {curr_w:,} / {max_w:,}")
-            if not player['inventory'] or sum(player['inventory'].values()) == 0:
-                st.info("인벤토리가 비어 있습니다.")
-            else:
-                for item, count in player['inventory'].items():
-                    if count > 0:
-                        i_w = items_info.get(item, {}).get('w', 0) * count
-                        st.markdown(f"""<div class="inventory-card">
-                        <b>{item}</b> : {count:,}개 <small>(무게: {i_w:,})</small>
-                        </div>""", unsafe_allow_html=True)
-            if st.button("💾 데이터 저장"):
-                # ... [저장 로직] ...
-                pass
+        with tab2: # 이동 시스템
+            st.subheader("🚩 이동할 마을 선택")
+            for v in villages:
+                if v['village_name'] == player['pos'] or v['village_name'] == "용병 고용소": continue
+                c1, c2 = st.columns([3, 1])
+                c1.write(f"**{v['village_name']}**")
+                if c2.button("이동하기", key=f"mv_{v['village_name']}"):
+                    player['pos'] = v['village_name']
+                    st.rerun()
 
-        with tab4: # 주막 (용병 무게 보너스 반영)
-            st.subheader("⚔️ 주막 (용병 고용)")
-            st.caption("용병을 고용하면 상단의 최대 감당 무게가 늘어납니다.")
-            # ... [용병 고용/해고 로직] ...
+        with tab3: # 상단정보 (인벤토리)
+            st.subheader("👤 상단 인벤토리 정보")
+            st.write(f"현재 감당 무게: **{curr_w:,} / {max_w:,}**")
+            for item, count in player['inventory'].items():
+                if count > 0:
+                    i_w = items_info.get(item, {}).get('w', 0) * count
+                    st.markdown(f"""<div class="inventory-card">
+                        <b>{item}</b>: {count:,}개 <small>(총 {i_w:,} 무게)</small>
+                    </div>""", unsafe_allow_html=True)
+            
+            st.divider()
+            if st.button("💾 상단 전체 정보 저장"):
+                ws = doc.worksheet("Player_Data")
+                save_row = [st.session_state.slot_num, player['money'], player['pos'], 
+                            json.dumps(player['mercs'], ensure_ascii=False), 
+                            json.dumps(player['inventory'], ensure_ascii=False), 
+                            datetime.now().strftime("%Y-%m-%d %H:%M:%S")]
+                ws.update(f"A{st.session_state.slot_num+1}:F{st.session_state.slot_num+1}", [save_row])
+                st.success("데이터베이스에 상단 정보가 저장되었습니다.")
+
+        with tab4: # 주막 (용병 시스템)
+            st.subheader("⚔️ 용병 고용 및 해고")
+            st.info(f"용병은 상단의 무게 제한을 늘려줍니다. (현재 최대: {max_w:,})")
+            
+            # 고용 가능한 용병
+            cols = st.columns(len(mercs_info))
+            for i, (m_name, m_val) in enumerate(mercs_info.items()):
+                with cols[i]:
+                    st.write(f"**{m_name}**")
+                    st.caption(f"가격: {m_val['price']:,}냥\n보너스: +{m_val['w_bonus']}")
+                    if st.button("고용", key=f"buy_{m_name}"):
+                        if player['money'] >= m_val['price']:
+                            player['money'] -= m_val['price']
+                            player['mercs'].append(m_name)
+                            st.rerun()
+            
+            st.divider()
+            st.write("📋 현재 고용 중인 용병")
+            for idx, m_name in enumerate(player['mercs']):
+                c1, c2 = st.columns([3, 1])
+                c1.write(f"{idx+1}. {m_name}")
+                if c2.button("해고", key=f"fire_{idx}"):
+                    player['mercs'].pop(idx)
+                    st.rerun()
