@@ -891,7 +891,7 @@ if doc:
                         move_options.append(option_text)
                         move_dict[option_text] = (t, cost)
                 
-                                if move_options:
+                if move_options:
                     selected = st.selectbox("이동할 마을", move_options)
                     if st.button("🚀 이동", use_container_width=True):
                         dest, cost = move_dict[selected]
@@ -928,6 +928,7 @@ if doc:
             st.divider()
             
             st.write("**⏰ 시간 시스템**")
+            st.write(f"30초 = 게임 1달")
             st.write(f"현재 시간: {get_time_display(player)}")
             
             st.divider()
@@ -940,10 +941,6 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
-        
-        # 0.5초마다 자동 새로고침
-        time.sleep(0.5)
-        st.rerun()
 
 
 
