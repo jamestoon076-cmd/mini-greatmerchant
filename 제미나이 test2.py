@@ -326,13 +326,16 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
             continue
             
         for i_name, i_info in v_data.items():
-            if i_name in items_info:
-                base = items_info[i_name]['base']
-                stock = i_info['stock']
-                initial_stock = initial_stocks.get(v_name, {}).get(i_name, 100)
-                
-                if initial_stock <= 0:
-                    initial_stock = 100
+                    if i_name in items_info:
+                        base = items_info[i_name]['base']
+                        stock = i_info['stock']
+                        initial_stock = initial_stocks.get(v_name, {}).get(i_name, 100)
+                        
+                        # 🔍 디버깅: 실제 초기재고 값 확인
+                        print(f"🔍 {v_name} {i_name}: 현재재고={stock}, 초기재고={initial_stock}, 비율={stock/initial_stock if initial_stock>0 else 0}")
+                        
+                        if initial_stock <= 0:
+                            initial_stock = 100
                 
                 if stock <= 0:
                     i_info['price'] = int(base * max_price_rate)
@@ -941,6 +944,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
