@@ -917,7 +917,7 @@ if doc:
             st.divider()
             
             st.write("**⏰ 시간 시스템**")
-            st.info(f"30초 = 게임 1달\n\n현재 시간: {get_time_display(player)}")
+            st.write(f"현재 시간: {get_time_display(player)}")
             
             st.divider()
             
@@ -933,6 +933,7 @@ if doc:
         # 0.5초마다 자동 새로고침
         time.sleep(0.5)
         st.rerun()
+
 
 
 
