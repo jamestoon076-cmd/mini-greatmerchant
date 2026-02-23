@@ -197,14 +197,36 @@ if res:
                             update_market_prices(settings, items_info, market, item_max_stocks)
                             st.success("매도 완료"); st.rerun()
 
-        with tab2:
-            for dest, d_info in villages.items():
-                if dest != curr_pos:
-                    dist = math.sqrt((villages[curr_pos]['x']-d_info['x'])**2 + (villages[curr_pos]['y']-d_info['y'])**2)
-                    cost = int(dist * settings['travel_cost'])
-                    if st.button(f"{dest} 이동 ({cost}냥)"):
-                        if player['money'] >= cost:
-                            player['money'] -= cost; player['pos'] = dest; st.rerun()
+        # --- 이동 탭: 마을 리스트 자동 생성 로직 ---
+with tab2:
+    st.subheader("🚩 팔도 강산 이동")
+    
+    # 1. 이동할 마을들을 리스트로 가져옴 (현재 위치 제외)
+    destinations = [name for name in villages.keys() if name != curr_pos]
+    
+    # 2. 버튼을 2열로 자동 배치 (마을이 많아져도 대응 가능)
+    cols = st.columns(2) 
+    
+    for idx, dest in enumerate(destinations):
+        with cols[idx % 2]: # 인덱스에 따라 왼쪽/오른쪽 컬럼에 자동 배분
+            d_info = villages[dest]
+            
+            # 거리 및 비용 계산 (시트 데이터 기반)
+            dist = math.sqrt(
+                (villages[curr_pos]['x'] - d_info['x'])**2 + 
+                (villages[curr_pos]['y'] - d_info['y'])**2
+            )
+            cost = int(dist * settings.get('travel_cost', 15))
+            
+            # 버튼 생성 (마을 이름만 추가하면 여기서 알아서 생김)
+            if st.button(f"🏯 {dest}\n({cost}냥 / {int(dist)}리)", key=f"move_{dest}"):
+                if player['money'] >= cost:
+                    player['money'] -= cost
+                    player['pos'] = dest
+                    st.success(f"✅ {dest}(으)로 이동했습니다!")
+                    st.rerun()
+                else:
+                    st.error("❌ 노잣돈이 부족합니다!")
 
         with tab3:
             st.write(f"⏰ 현재 시간: {get_time_display(player)}")
@@ -216,3 +238,4 @@ if res:
                 st.success("저장 완료")
             if st.button("🚪 메인으로", use_container_width=True):
                 st.session_state.game_started = False; st.rerun()
+
