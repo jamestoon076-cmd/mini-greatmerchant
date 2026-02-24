@@ -220,17 +220,23 @@ def update_game_time(player, settings, market_data, initial_stocks):
         st.session_state.last_time_update = current_time
         return player, []
     
+    # 1. 계산 기준 설정
     elapsed = current_time - st.session_state.last_time_update
     seconds_per_month = int(settings.get('seconds_per_month', 180))
-    months_passed = int(elapsed / seconds_per_month)
+    seconds_per_week = seconds_per_month / 4  # 1주일에 해당하는 초
+    
+    # 2. 몇 주가 지났는지 계산 (1주 단위로 업데이트)
+    weeks_passed = int(elapsed / seconds_per_week)
     
     events = []
     
-    if months_passed > 0:
+    if weeks_passed > 0:
+        # 현재 상태 저장
         old_month = player['month']
         old_year = player['year']
         
-        for _ in range(months_passed):
+        # 지난 주수만큼 반복하며 시간 증가
+        for _ in range(weeks_passed):
             player['week'] += 1
             if player['week'] > 4:
                 player['week'] = 1
@@ -239,9 +245,11 @@ def update_game_time(player, settings, market_data, initial_stocks):
                     player['month'] = 1
                     player['year'] += 1
         
-        st.session_state.last_time_update = current_time
+        # 3. 마지막 업데이트 시간 갱신 (지나간 시간만큼만 정밀하게 차감)
+        st.session_state.last_time_update += weeks_passed * seconds_per_week
         st.session_state.last_update = current_time
         
+        # 월이 바뀌었을 때 (재고 초기화 등)
         if old_month != player['month'] or old_year != player['year']:
             events.append(("month", f"🌙 {player['year']}년 {player['month']}월이 시작되었습니다!"))
             
@@ -250,20 +258,18 @@ def update_game_time(player, settings, market_data, initial_stocks):
                 if v_name in initial_stocks:
                     for item_name in market_data[v_name]:
                         if item_name in initial_stocks[v_name]:
-                            old_stock = market_data[v_name][item_name]['stock']
                             market_data[v_name][item_name]['stock'] = initial_stocks[v_name][item_name]
-                            if old_stock != initial_stocks[v_name][item_name]:
-                                reset_count += 1
+                            reset_count += 1
             if reset_count > 0:
-                events.append(("reset", f"🔄 {reset_count}개 품목 재고 초기화"))
-        
+                events.append(("reset", f"🔄 전 대륙 물품 재고 초기화"))
+
+        # 주차 업데이트 알림
         events.append(("week", f"🌟 {player['year']}년 {player['month']}월 {player['week']}주차"))
         
-        # ✅ season effect 관련 코드 완전히 삭제됨
-        
-        # volatility -> inventoryResponsivePrice로 변경
+        # 4. 돌발 이벤트 (가격 변동) - 주 단위로 체크하도록 변경
         inventoryResponsivePrice = settings.get('inventoryResponsivePrice', 5000)
-        event_probability = inventoryResponsivePrice / 1000000
+        # 주 단위이므로 확률을 월 단위보다 낮춤 (기존 / 1000000 -> / 4000000)
+        event_probability = inventoryResponsivePrice / 4000000
         
         if random.random() < event_probability:
             cities = list(market_data.keys())
@@ -277,13 +283,13 @@ def update_game_time(player, settings, market_data, initial_stocks):
                     
                     if vol_direction == "상승":
                         market_data[random_city][vol_item]['price'] = int(market_data[random_city][vol_item]['price'] * (1 + vol_amount/100))
-                        events.append(("volatility", f"📈 {random_city}의 {vol_item} 가격 {vol_amount}% 급등!"))
+                        events.append(("volatility", f"📈 {random_city}: {vol_item} 가격 {vol_amount}% 급등!"))
                     else:
                         market_data[random_city][vol_item]['price'] = int(market_data[random_city][vol_item]['price'] * (1 - vol_amount/100))
-                        events.append(("volatility", f"📉 {random_city}의 {vol_item} 가격 {vol_amount}% 급락!"))
+                        events.append(("volatility", f"📉 {random_city}: {vol_item} 가격 {vol_amount}% 급락!"))
     
     return player, events
-
+    
 def get_time_display(player):
     month_names = ["1월", "2월", "3월", "4월", "5월", "6월", 
                    "7월", "8월", "9월", "10월", "11월", "12월"]
@@ -1014,6 +1020,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
