@@ -243,8 +243,14 @@ def update_game_time(player, settings, market_data, initial_stocks):
                     player['year'] += 1
         
         # 기준점 갱신
-        st.session_state.last_time_update += weeks_passed * seconds_per_week
-        events.append(("week", f"🌟 {player['year']}년 {player['month']}월 {player['week']}주차 소식이 도착했습니다."))
+        #st.session_state.last_time_update += weeks_passed * seconds_per_week
+        #events.append(("week", f"🌟 {player['year']}년 {player['month']}월 {player['week']}주차 소식이 도착했습니다."))
+
+        # 1주일 알림을 세션에 시간과 함께 저장 (5초 노출용)
+        st.session_state.event_display = {
+        "message": f"🌟 {player['year']}년 {player['month']}월 {player['week']}주차 소식이 도착했습니다.",
+        "time": time.time()
+        }
         
         # 재고 초기화 체크 (180초 주기가 완료될 때)
         if player['week'] == 1:
@@ -628,9 +634,21 @@ if doc:
         update_prices(settings, items_info, market_data, initial_stocks)
         cw, tw = get_weight(player, items_info, merc_data)
         
-        # 상단 정보 표시
+        # --- 상단 정보 표시 ---
         st.title(f"🏯 {player['pos']}")
-        
+
+        # ⭐ 상단 알림 메시지 (5초 노출 로직)
+        if 'event_display' in st.session_state:
+            msg_data = st.session_state.event_display
+            # 현재 시간과 메시지 발생 시간 비교 (5초 기준)
+            if time.time() - msg_data['time'] < 5:
+                st.info(msg_data['message']) # 상단에 파란색 알림 박스 출력
+            else:
+                # 5초가 지나면 세션에서 삭제하여 화면에서 치움
+                del st.session_state.event_display
+
+        # 이후 기존 col1, col2, col3, col4 코드가 이어짐
+
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("💰 소지금", f"{player['money']:,}냥")
         col2.metric("⚖️ 무게", f"{cw}/{tw}근")
@@ -1053,6 +1071,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
