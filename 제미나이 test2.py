@@ -490,70 +490,70 @@ def save_player_data(doc, player, stats, device_id):
         st.error(f"❌ 저장 실패: {e}")
         return False
 
-# --- 7. 메인 실행 ---
-doc = connect_gsheet()
-init_session_state()
-
-if doc:
-    if not st.session_state.game_started:
-        st.title("🏯 조선거상 미니")
-        st.markdown("---")
-        
-        settings, items_info, merc_data, villages, initial_stocks, slots = load_game_data()        
-        
-        if slots:
-            st.subheader("📋 세이브 슬롯 선택")
-            
-            cols = st.columns(3)
-            for i, s in enumerate(slots[:3]):
-                with cols[i]:
-                    st.info(f"**슬롯 {s['slot']}**\n\n"
-                           f"📍 {s['pos']}\n"
-                           f"💰 {s['money']:,}냥\n"
-                           f"📅 {s['year']}년 {s['month']}월")
-            
-            slot_choice = st.selectbox("슬롯 번호", options=[1, 2, 3], index=0)
-            
-            # 게임 시작 부분 (슬롯 선택 후)
-            if st.button("🎮 게임 시작", use_container_width=True):
-                selected = next((s for s in slots if s['slot'] == slot_choice), None)
-                if selected:
-                    st.session_state.player = selected
-                    st.session_state.settings = settings
-                    st.session_state.items_info = items_info
-                    st.session_state.merc_data = merc_data
-                    st.session_state.villages = villages
-                    st.session_state.initial_stocks = initial_stocks
-                    st.session_state.last_time_update = time.time()
-                    st.session_state.trade_logs = {}
-                    
-                    market_data = {}
-                    for v_name, v_data in villages.items():
-                        if v_name != "용병 고용소":
-                            market_data[v_name] = {}
-                            for item_name, stock in v_data['items'].items():
-                                market_data[v_name][item_name] = {
-                                    'stock': stock,
-                                    'price': items_info[item_name]['base']  # 임시로 base 설정
-                                }
-                    
-                    # ✅ 추가: market_data 생성 후 update_prices() 호출하여 가격 계산
-                    update_prices(settings, items_info, market_data, initial_stocks)
-                    
-                    st.session_state.market_data = market_data
-                    st.session_state.game_started = True
-                    st.rerun()
-                else:
-                    st.error("❌ 존재하지 않는 슬롯입니다.")
+    # --- 7. 메인 실행 ---
+    doc = connect_gsheet()
+    init_session_state()
     
-    else:
-        player = st.session_state.player
-        settings = st.session_state.settings
-        items_info = st.session_state.items_info
-        merc_data = st.session_state.merc_data
-        villages = st.session_state.villages
-        market_data = st.session_state.market_data
-        initial_stocks = st.session_state.initial_stocks
+    if doc:
+        if not st.session_state.game_started:
+            st.title("🏯 조선거상 미니")
+            st.markdown("---")
+            
+            settings, items_info, merc_data, villages, initial_stocks, slots = load_game_data()        
+            
+            if slots:
+                st.subheader("📋 세이브 슬롯 선택")
+                
+                cols = st.columns(3)
+                for i, s in enumerate(slots[:3]):
+                    with cols[i]:
+                        st.info(f"**슬롯 {s['slot']}**\n\n"
+                               f"📍 {s['pos']}\n"
+                               f"💰 {s['money']:,}냥\n"
+                               f"📅 {s['year']}년 {s['month']}월")
+                
+                slot_choice = st.selectbox("슬롯 번호", options=[1, 2, 3], index=0)
+                
+                # 게임 시작 부분 (슬롯 선택 후)
+                if st.button("🎮 게임 시작", use_container_width=True):
+                    selected = next((s for s in slots if s['slot'] == slot_choice), None)
+                    if selected:
+                        st.session_state.player = selected
+                        st.session_state.settings = settings
+                        st.session_state.items_info = items_info
+                        st.session_state.merc_data = merc_data
+                        st.session_state.villages = villages
+                        st.session_state.initial_stocks = initial_stocks
+                        st.session_state.last_time_update = time.time()
+                        st.session_state.trade_logs = {}
+                        
+                        market_data = {}
+                        for v_name, v_data in villages.items():
+                            if v_name != "용병 고용소":
+                                market_data[v_name] = {}
+                                for item_name, stock in v_data['items'].items():
+                                    market_data[v_name][item_name] = {
+                                        'stock': stock,
+                                        'price': items_info[item_name]['base']  # 임시로 base 설정
+                                    }
+                        
+                        # ✅ 추가: market_data 생성 후 update_prices() 호출하여 가격 계산
+                        update_prices(settings, items_info, market_data, initial_stocks)
+                        
+                        st.session_state.market_data = market_data
+                        st.session_state.game_started = True
+                        st.rerun()
+                    else:
+                        st.error("❌ 존재하지 않는 슬롯입니다.")
+        
+        else:
+            player = st.session_state.player
+            settings = st.session_state.settings
+            items_info = st.session_state.items_info
+            merc_data = st.session_state.merc_data
+            villages = st.session_state.villages
+            market_data = st.session_state.market_data
+            initial_stocks = st.session_state.initial_stocks
         
 # --- 7. 메인 실행 ---
 doc = connect_gsheet()
@@ -1053,6 +1053,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
