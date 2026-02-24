@@ -548,6 +548,7 @@ if doc:
         market_data = st.session_state.market_data
         initial_stocks = st.session_state.initial_stocks
         
+        # 메인 실행 부분
         current_time = time.time()
         if current_time - st.session_state.last_update > 1:
             player, events = update_game_time(player, settings, market_data, initial_stocks)
@@ -555,7 +556,8 @@ if doc:
                 st.session_state.events = events
             st.session_state.last_update = current_time
         
-        update_prices(settings, items_info, market_data, initial_stocks)
+        update_prices(settings, items_info, market_data, initial_stocks)  # <-- 여기서 호출됨
+        
         cw, tw = get_weight(player, items_info, merc_data)
         
         if st.session_state.events:
@@ -932,6 +934,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
