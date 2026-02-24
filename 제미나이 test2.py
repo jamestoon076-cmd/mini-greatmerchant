@@ -297,8 +297,10 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
     min_price_rate = settings.get('min_price_rate', 0.4)
     max_price_rate = settings.get('max_price_rate', 3.0)
     
-    # ✅ inventoryResponsivePrice 값을 직접 사용
     inventoryResponsivePrice = settings.get('inventoryResponsivePrice', 5000)
+    
+    # ✅ 디버깅: 함수 호출 확인
+    print(f"🔍 update_prices() 호출됨 - inventoryResponsivePrice: {inventoryResponsivePrice}")
     
     for v_name, v_data in market_data.items():
         if v_name == "용병 고용소":
@@ -313,37 +315,36 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
                 if initial_stock <= 0:
                     initial_stock = 100
                 
+                # ✅ 디버깅: 생선 가격 계산 전 상태
+                if i_name == "생선" and v_name in ["한양", "부산"]:
+                    print(f"🔍 [{v_name}] {i_name} - 재고: {stock}, 초기재고: {initial_stock}, 비율: {stock/initial_stock:.2f}")
+                
                 if stock <= 0:
                     i_info['price'] = int(base * max_price_rate)
                 else:
                     stock_ratio = stock / initial_stock
                     
-                    # ✅ inventoryResponsivePrice를 직접 사용한 가격 계산
-                    # inventoryResponsivePrice가 5000일 때:
-                    # - 재고 30% 미만: 가격 250% (1.0 + 1.5)
-                    # - 재고 50% 미만: 가격 200% (1.0 + 1.0)
-                    # - 재고 70% 미만: 가격 150% (1.0 + 0.5)
-                    # - 재고 100% 미만: 가격 120% (1.0 + 0.2)
-                    # - 재고 130% 미만: 가격 100% (1.0)
-                    # - 재고 160% 미만: 가격 80% (1.0 - 0.2)
-                    # - 재고 160% 이상: 가격 60% (1.0 - 0.4)
+                    if stock_ratio < 0.3:
+                        price_factor = 1.0 + (inventoryResponsivePrice / 3333)
+                    elif stock_ratio < 0.5:
+                        price_factor = 1.0 + (inventoryResponsivePrice / 5000)
+                    elif stock_ratio < 0.7:
+                        price_factor = 1.0 + (inventoryResponsivePrice / 10000)
+                    elif stock_ratio < 1.0:
+                        price_factor = 1.0 + (inventoryResponsivePrice / 25000)
+                    elif stock_ratio < 1.3:
+                        price_factor = 1.0
+                    elif stock_ratio < 1.6:
+                        price_factor = 1.0 - (inventoryResponsivePrice / 25000)
+                    else:
+                        price_factor = 1.0 - (inventoryResponsivePrice / 12500)
                     
-                    if stock_ratio < 0.3:  # 재고 30% 미만
-                        price_factor = 1.0 + (inventoryResponsivePrice / 3333)  # 5000 -> 2.5 (250%)
-                    elif stock_ratio < 0.5:  # 재고 50% 미만
-                        price_factor = 1.0 + (inventoryResponsivePrice / 5000)  # 5000 -> 2.0 (200%)
-                    elif stock_ratio < 0.7:  # 재고 70% 미만
-                        price_factor = 1.0 + (inventoryResponsivePrice / 10000)  # 5000 -> 1.5 (150%)
-                    elif stock_ratio < 1.0:  # 재고 100% 미만
-                        price_factor = 1.0 + (inventoryResponsivePrice / 25000)  # 5000 -> 1.2 (120%)
-                    elif stock_ratio < 1.3:  # 재고 130% 미만
-                        price_factor = 1.0  # 100%
-                    elif stock_ratio < 1.6:  # 재고 160% 미만
-                        price_factor = 1.0 - (inventoryResponsivePrice / 25000)  # 5000 -> 0.8 (80%)
-                    else:  # 재고 160% 이상
-                        price_factor = 1.0 - (inventoryResponsivePrice / 12500)  # 5000 -> 0.6 (60%)
-                    
+                    old_price = i_info['price']
                     i_info['price'] = int(base * price_factor)
+                    
+                    # ✅ 디버깅: 생선 가격 계산 후 상태
+                    if i_name == "생선" and v_name in ["한양", "부산"]:
+                        print(f"🔍 [{v_name}] {i_name} - 가격: {old_price} -> {i_info['price']} (요인: {price_factor:.2f})")
                     
                     # 최소/최대 가격 제한 적용
                     min_price = int(base * min_price_rate)
@@ -351,7 +352,7 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
                         i_info['price'] = min_price
                     if i_info['price'] > base * max_price_rate:
                         i_info['price'] = int(base * max_price_rate)
-
+                        
 def get_weight(player, items_info, merc_data):
     cw = 0
     for item, qty in player['inv'].items():
@@ -511,6 +512,7 @@ if doc:
             
             slot_choice = st.selectbox("슬롯 번호", options=[1, 2, 3], index=0)
             
+            # 게임 시작 부분 (슬롯 선택 후)
             if st.button("🎮 게임 시작", use_container_width=True):
                 selected = next((s for s in slots if s['slot'] == slot_choice), None)
                 if selected:
@@ -530,10 +532,13 @@ if doc:
                             for item_name, stock in v_data['items'].items():
                                 market_data[v_name][item_name] = {
                                     'stock': stock,
-                                    'price': items_info[item_name]['base']
+                                    'price': items_info[item_name]['base']  # 임시로 base 설정
                                 }
-                    st.session_state.market_data = market_data
                     
+                    # ✅ 추가: market_data 생성 후 update_prices() 호출하여 가격 계산
+                    update_prices(settings, items_info, market_data, initial_stocks)
+                    
+                    st.session_state.market_data = market_data
                     st.session_state.game_started = True
                     st.rerun()
                 else:
@@ -934,6 +939,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
