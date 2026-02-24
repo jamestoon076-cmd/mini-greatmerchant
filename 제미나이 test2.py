@@ -221,9 +221,12 @@ def update_game_time(player, settings, market_data, initial_stocks):
         return player, []
     
     # 1. 계산 기준 설정
-    elapsed = current_time - st.session_state.last_time_update
-    seconds_per_month = int(settings.get('seconds_per_month', 180))
-    seconds_per_week = seconds_per_month / 4  # 1주일에 해당하는 초
+   # 남은 시간 계산 (현재 주차 내에서 남은 초)
+    seconds_per_week = seconds_per_month / 4
+    elapsed_since_last = time.time() - st.session_state.last_time_update
+    remaining = max(0, int(seconds_per_week - elapsed_since_last))
+
+time_left_placeholder.metric("⏰ 다음 주까지", f"{remaining}초")
     
     # 2. 몇 주가 지났는지 계산 (1주 단위로 업데이트)
     weeks_passed = int(elapsed / seconds_per_week)
@@ -1020,6 +1023,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
