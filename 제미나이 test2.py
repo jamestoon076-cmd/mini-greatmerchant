@@ -83,6 +83,7 @@ def load_game_data():
         # 설정 데이터 로드
         set_ws = doc.worksheet("Setting_Data")
         settings = {r['변수명']: float(r['값']) for r in set_ws.get_all_records()}
+        # volatility 값이 settings 딕셔너리에 자동으로 포함됨
         
         # 아이템 정보 로드
         item_ws = doc.worksheet("Item_Data")
@@ -220,8 +221,7 @@ def update_game_time(player, settings, market_data, initial_stocks):
         return player, []
     
     elapsed = current_time - st.session_state.last_time_update
-    # ✅ 스프레드시트에서 seconds_per_month 값 가져오기
-    seconds_per_month = int(settings.get('seconds_per_month', 180))  # 기본값 180
+    seconds_per_month = int(settings.get('seconds_per_month', 180))
     months_passed = int(elapsed / seconds_per_month)
     
     events = []
@@ -241,10 +241,6 @@ def update_game_time(player, settings, market_data, initial_stocks):
         
         st.session_state.last_time_update = current_time
         st.session_state.last_update = current_time
-        
-        # ... 나머지 코드 ...
-    
-        return player, events
         
         if old_month != player['month'] or old_year != player['year']:
             events.append(("month", f"🌙 {player['year']}년 {player['month']}월이 시작되었습니다!"))
@@ -275,7 +271,12 @@ def update_game_time(player, settings, market_data, initial_stocks):
                 events.append(("season", msg))
                 break
         
-        if random.random() < 0.3:
+        # ✅ volatility 값을 settings에서 가져와서 사용
+        volatility = settings.get('volatility', 5000)  # 기본값 5000
+        # volatility가 높을수록 변동성이 심해짐 (예: 5000이면 0.5% 확률, 10000이면 1% 확률)
+        event_probability = volatility / 1000000  # 5000 -> 0.005 (0.5%), 10000 -> 0.01 (1%)
+        
+        if random.random() < event_probability:
             cities = list(market_data.keys())
             if cities:
                 random_city = random.choice(cities)
@@ -283,7 +284,8 @@ def update_game_time(player, settings, market_data, initial_stocks):
                 if items_in_city:
                     vol_item = random.choice(items_in_city)
                     vol_direction = random.choice(["상승", "하락"])
-                    vol_amount = random.randint(10, 30)
+                    # volatility가 높을수록 변동폭도 커짐
+                    vol_amount = random.randint(10, 30) + int(volatility / 1000)
                     
                     if vol_direction == "상승":
                         market_data[random_city][vol_item]['price'] = int(market_data[random_city][vol_item]['price'] * (1 + vol_amount/100))
@@ -917,6 +919,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
