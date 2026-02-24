@@ -542,8 +542,7 @@ if doc:
                 st.markdown(f"<div class='event-message'>{message}</div>", unsafe_allow_html=True)
             st.session_state.events = []
         
-    # 상단 정보 부분 (기존 col1~col4 + metric + JS 부분을 이걸로 통째 교체)
-    
+        # 상단 정보 부분
         st.title(f"🏯 {player['pos']}")
         
         col1, col2, col3, col4 = st.columns(4)
@@ -565,36 +564,49 @@ if doc:
         time_left_placeholder = col4.empty()
         time_left_placeholder.metric("⏰ 다음 달까지", f"{remaining}초")
         
-        # 한 번에 정의되는 단일 스크립트 (변수 정의 → 함수 → 실행 순서 보장)
+        # JavaScript로 실시간 업데이트 (시간초만)
         st.markdown(f"""
         <script>
-        (function() {{
-            const startTime = {int(st.session_state.last_time_update)};
-            const duration = {seconds_per_month};
+        // 서버에서 받은 마지막 업데이트 시간
+        const lastUpdateTime = {st.session_state.last_time_update};
+        const secondsPerMonth = {seconds_per_month};
         
-            function updateCountdown() {{
-                const now = Math.floor(Date.now() / 1000);
-                const elapsed = now - startTime;
-                let left = duration - (elapsed % duration);
-                if (left <= 0) left = duration;
-        
-                // metric 값 업데이트 시도 (Streamlit metric의 마지막 값 잡기)
-                const countdownElem = document.querySelector('div[data-testid="stMetricValue"]');
-                if (countdownElem) {{
-                    countdownElem.innerText = Math.floor(left) + '초';
-                }}
-        
-                // 달 바뀔 때만 새로고침
-                if (elapsed >= duration - 3) {{
-                    setTimeout(() => {{ location.reload(); }}, 1200);
-                }}
+        function updateCountdown() {{
+            // 현재 시간 계산
+            const now = Date.now() / 1000;
+            const elapsed = now - lastUpdateTime;
+            
+            // 남은 초 계산
+            const remainingSeconds = Math.max(0, secondsPerMonth - (elapsed % secondsPerMonth));
+            
+            // 네 번째 컬럼의 metric 값 업데이트 (시간초)
+            const metricValues = document.querySelectorAll('[data-testid="stMetricValue"]');
+            if (metricValues.length >= 4) {{
+                metricValues[3].innerText = Math.floor(remainingSeconds) + '초';
             }}
+            
+            // 1달이 지났는지 확인 (게임 시간 업데이트 필요)
+            if (elapsed >= secondsPerMonth - 2) {{
+                setTimeout(() => location.reload(), 2000);
+            }}
+        }}
         
-            setInterval(updateCountdown, 1000);
-            updateCountdown();
-        }})();
+        // 1초마다 업데이트
+        setInterval(updateCountdown, 1000);
+        updateCountdown();
         </script>
         """, unsafe_allow_html=True)
+        
+        # 이벤트 메시지 표시 (주차 변경)
+        if st.session_state.events:
+            for event_type, message in st.session_state.events:
+                if "주차" in message or "월이 시작" in message:
+                    st.markdown(f"<div class='event-message'>{message}</div>", unsafe_allow_html=True)
+            st.session_state.events = [e for e in st.session_state.events if not ("주차" in e[1] or "월이 시작" in e[1])]
+        
+        st.markdown(f"<div style='text-align: right; color: #666; margin-bottom: 10px;'>📊 거래 횟수: {st.session_state.stats['trade_count']}회</div>", unsafe_allow_html=True)
+        
+        st.divider()
                 
         # 현재 탭 상태 초기화 - 이동 후 탭 전환을 위해 필요
         if 'current_tab' not in st.session_state:
@@ -1002,6 +1014,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
