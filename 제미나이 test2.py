@@ -570,7 +570,7 @@ if doc:
         if 'current_tab' not in st.session_state:
             st.session_state.current_tab = 0
             
-                tab1, tab2, tab3, tab4, tab5 = st.tabs(["🛒 저잣거리", "📦 인벤토리", "⚔️ 용병", "📊 통계", "⚙️ 이동"])
+            tab1, tab2, tab3, tab4, tab5 = st.tabs(["🛒 저잣거리", "📦 인벤토리", "⚔️ 용병", "📊 통계", "⚙️ 이동"])
         
         # 현재 탭 설정 (선택된 탭을 세션에 저장)
         # st.tabs는 자동으로 선택을 기억하지 않으므로, 세션 상태를 사용
@@ -987,6 +987,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
