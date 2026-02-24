@@ -935,8 +935,8 @@ if doc:
                 
                 if move_options:
                     selected = st.selectbox("이동할 마을", move_options)
-                        if st.button("🚀 이동", use_container_width=True):
-                            dest, cost = move_dict[selected]
+                    if st.button("🚀 이동", use_container_width=True):
+                        dest, cost = move_dict[selected]
                         if player['money'] >= cost:
                             player['money'] -= cost
                             # 현재 도시의 로그 삭제 (이동 전 도시)
@@ -959,7 +959,7 @@ if doc:
                                 del st.session_state[key]
                             
                             player['pos'] = dest
-                            money_placeholder.metric("💰 소지금", f"{player['money']:,}냥)
+                            money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
                             
                             # ✅ 이동 후 저잣거리 탭(0)으로 전환
                             st.session_state.current_tab = 0
@@ -987,6 +987,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
