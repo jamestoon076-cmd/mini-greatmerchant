@@ -557,63 +557,50 @@ if doc:
         seconds_per_month = int(settings.get('seconds_per_month', 180))
         elapsed = time.time() - st.session_state.last_time_update
         remaining = max(0, seconds_per_month - int(elapsed))
-        last_update_seconds = int(st.session_state.last_time_update)
+        last_update = st.session_state.last_time_update
         
         # HTML + JavaScript로 실시간 업데이트
-        clock_html = f"""
-        <div id="clock_container" style="margin: 10px 0; padding: 15px; background-color: #f0f2f6; border-radius: 10px;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                <div style="text-align: center; flex: 1;">
-                    <div style="font-size: 14px; color: #666;">📅 게임 시간</div>
-                    <div id="game_time_display" style="font-size: 20px; font-weight: bold;">{get_time_display(player)}</div>
-                </div>
-                <div style="text-align: center; flex: 1;">
-                    <div style="font-size: 14px; color: #666;">⏰ 다음 달까지</div>
-                    <div id="time_left_display" style="font-size: 20px; font-weight: bold;">{remaining}초</div>
-                </div>
-            </div>
-        </div>
-        
-        <script>
-        (function() {{
-            // 서버에서 받은 데이터
-            const startTime = {last_update};
-            const monthSeconds = {seconds_per_month};
-            const initialRemaining = {remaining};
-            
-            // 이미 표시된 게임 시간 (고정)
-            const gameTimeStr = "{get_time_display(player)}";
-            
-            function updateRemainingTime() {{
-                try {{
-                    const now = Date.now() / 1000;
-                    const elapsed = now - startTime;
-                    const remainingSeconds = Math.max(0, monthSeconds - (elapsed % monthSeconds));
-                    
-                    const timeLeftElement = document.getElementById('time_left_display');
-                    if (timeLeftElement) {{
-                        timeLeftElement.innerText = Math.floor(remainingSeconds) + '초';
-                    }}
-                    
-                    // 1달이 지났는지 확인
-                    const monthsPassed = Math.floor(elapsed / monthSeconds);
-                    if (monthsPassed > 0) {{
-                        // 페이지 새로고침 (게임 시간 업데이트)
-                        setTimeout(() => location.reload(), 500);
-                    }}
-                }} catch (e) {{
-                    console.error('Clock error:', e);
-                }}
-            }}
-            
-            // 1초마다 업데이트
-            updateRemainingTime();
-            setInterval(updateRemainingTime, 1000);
-        }})();
-        </script>
-        """
-        
-        st.markdown(clock_html, unsafe_allow_html=True)
+        seconds_per_month = int(settings.get('seconds_per_month', 180))
+elapsed = time.time() - st.session_state.last_time_update
+remaining = max(0, seconds_per_month - int(elapsed))
+
+last_update_seconds = int(st.session_state.last_time_update)
+
+clock_html = f"""
+<div style="display: flex; justify-content: space-between; margin: 10px 0; padding: 15px; background-color: #f0f2f6; border-radius: 10px;">
+    <div style="text-align: center; flex: 1;">
+        <div style="font-size: 14px; color: #666;">📅 게임 시간</div>
+        <div id="game_time" style="font-size: 20px; font-weight: bold;">{get_time_display(player)}</div>
+    </div>
+    <div style="text-align: center; flex: 1;">
+        <div style="font-size: 14px; color: #666;">⏰ 다음 달까지</div>
+        <div id="time_left" style="font-size: 20px; font-weight: bold;">{remaining}초</div>
+    </div>
+</div>
+
+<script>
+const lastUpdateTime = {last_update_seconds};
+const secondsPerMonth = {seconds_per_month};
+
+function updateClock() {{
+    const now = Date.now() / 1000;
+    const elapsed = now - lastUpdateTime;
+    let remaining = secondsPerMonth - (elapsed % secondsPerMonth);
+    if (remaining < 0 || remaining > secondsPerMonth) remaining = secondsPerMonth;
+
+    document.getElementById('time_left').innerText = Math.floor(remaining) + '초';
+
+    if (elapsed >= secondsPerMonth - 2) {{
+        setTimeout(() => location.reload(), 1000);
+    }}
+}}
+
+setInterval(updateClock, 1000);
+updateClock();
+</script>
+"""
+
+st.markdown(clock_html, unsafe_allow_html=True)
         
         # 이벤트 메시지 표시
         if st.session_state.events:
@@ -1032,6 +1019,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
