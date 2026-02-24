@@ -324,9 +324,6 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
                 
                 i_info['price'] = int(base * price_factor)
                 
-                # 디버그
-                if i_name == "생선" and v_name in ["한양", "부산"]:
-                    st.write(f"📊 {v_name} 생선: 재고={stock}, 가격={i_info['price']}냥")
                         
 def get_weight(player, items_info, merc_data):
     cw = 0
@@ -914,6 +911,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
