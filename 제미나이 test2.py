@@ -544,57 +544,57 @@ if doc:
         
     # 상단 정보 부분 (기존 col1~col4 + metric + JS 부분을 이걸로 통째 교체)
     
-    st.title(f"🏯 {player['pos']}")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    money_placeholder = col1.empty()
-    money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
-    
-    weight_placeholder = col2.empty()
-    weight_placeholder.metric("⚖️ 무게", f"{cw}/{tw}근")
-    
-    time_placeholder = col3.empty()
-    time_placeholder.metric("📅 시간", get_time_display(player))
-    
-    # 남은 시간 계산
-    seconds_per_month = int(settings.get('seconds_per_month', 180))
-    elapsed = time.time() - st.session_state.last_time_update
-    remaining = max(0, seconds_per_month - int(elapsed))
-    
-    time_left_placeholder = col4.empty()
-    time_left_placeholder.metric("⏰ 다음 달까지", f"{remaining}초")
-    
-    # 한 번에 정의되는 단일 스크립트 (변수 정의 → 함수 → 실행 순서 보장)
-    st.markdown(f"""
-    <script>
-    (function() {{
-        const startTime = {int(st.session_state.last_time_update)};
-        const duration = {seconds_per_month};
-    
-        function updateCountdown() {{
-            const now = Math.floor(Date.now() / 1000);
-            const elapsed = now - startTime;
-            let left = duration - (elapsed % duration);
-            if (left <= 0) left = duration;
-    
-            // metric 값 업데이트 시도 (Streamlit metric의 마지막 값 잡기)
-            const countdownElem = document.querySelector('div[data-testid="stMetricValue"]');
-            if (countdownElem) {{
-                countdownElem.innerText = Math.floor(left) + '초';
+        st.title(f"🏯 {player['pos']}")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        money_placeholder = col1.empty()
+        money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
+        
+        weight_placeholder = col2.empty()
+        weight_placeholder.metric("⚖️ 무게", f"{cw}/{tw}근")
+        
+        time_placeholder = col3.empty()
+        time_placeholder.metric("📅 시간", get_time_display(player))
+        
+        # 남은 시간 계산
+        seconds_per_month = int(settings.get('seconds_per_month', 180))
+        elapsed = time.time() - st.session_state.last_time_update
+        remaining = max(0, seconds_per_month - int(elapsed))
+        
+        time_left_placeholder = col4.empty()
+        time_left_placeholder.metric("⏰ 다음 달까지", f"{remaining}초")
+        
+        # 한 번에 정의되는 단일 스크립트 (변수 정의 → 함수 → 실행 순서 보장)
+        st.markdown(f"""
+        <script>
+        (function() {{
+            const startTime = {int(st.session_state.last_time_update)};
+            const duration = {seconds_per_month};
+        
+            function updateCountdown() {{
+                const now = Math.floor(Date.now() / 1000);
+                const elapsed = now - startTime;
+                let left = duration - (elapsed % duration);
+                if (left <= 0) left = duration;
+        
+                // metric 값 업데이트 시도 (Streamlit metric의 마지막 값 잡기)
+                const countdownElem = document.querySelector('div[data-testid="stMetricValue"]');
+                if (countdownElem) {{
+                    countdownElem.innerText = Math.floor(left) + '초';
+                }}
+        
+                // 달 바뀔 때만 새로고침
+                if (elapsed >= duration - 3) {{
+                    setTimeout(() => {{ location.reload(); }}, 1200);
+                }}
             }}
-    
-            // 달 바뀔 때만 새로고침
-            if (elapsed >= duration - 3) {{
-                setTimeout(() => {{ location.reload(); }}, 1200);
-            }}
-        }}
-    
-        setInterval(updateCountdown, 1000);
-        updateCountdown();
-    }})();
-    </script>
-    """, unsafe_allow_html=True)
+        
+            setInterval(updateCountdown, 1000);
+            updateCountdown();
+        }})();
+        </script>
+        """, unsafe_allow_html=True)
                 
         # 현재 탭 상태 초기화 - 이동 후 탭 전환을 위해 필요
         if 'current_tab' not in st.session_state:
@@ -1002,6 +1002,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
