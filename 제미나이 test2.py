@@ -547,30 +547,29 @@ if doc:
         
         col1, col2, col3, col4 = st.columns(4)
         money_placeholder = col1.empty()
-        weight_placeholder = col2.empty()
-        time_placeholder = col3.empty()
-        time_left_placeholder = col4.empty()
-        
-        # 시간 업데이트
-        current_time = time.time()
-        if current_time - st.session_state.last_update > 1:
-            player, events = update_game_time(player, settings, market_data, initial_stocks)
-            if events:
-                st.session_state.events = events
-            st.session_state.last_update = current_time
-        
-        update_prices(settings, items_info, market_data, initial_stocks)
-        cw, tw = get_weight(player, items_info, merc_data)
-        
-        # 메트릭 업데이트
         money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
+        
+        weight_placeholder = col2.empty()
         weight_placeholder.metric("⚖️ 무게", f"{cw}/{tw}근")
+        
+        time_placeholder = col3.empty()
         time_placeholder.metric("📅 시간", get_time_display(player))
         
         seconds_per_month = int(settings.get('seconds_per_month', 180))
         elapsed = time.time() - st.session_state.last_time_update
         remaining = max(0, seconds_per_month - int(elapsed))
+        time_left_placeholder = col4.empty()
         time_left_placeholder.metric("⏰ 다음 달까지", f"{remaining}초")
+        
+        # JavaScript를 사용한 실시간 업데이트 (시간초만)
+        st.markdown("""
+        <script>
+        // 1초마다 페이지 새로고침
+        setTimeout(function() {
+            location.reload();
+        }, 1000);
+        </script>
+        """, unsafe_allow_html=True)
         
         # 이벤트 메시지 표시
         if st.session_state.events:
@@ -582,15 +581,6 @@ if doc:
         st.markdown(f"<div style='text-align: right; color: #666; margin-bottom: 10px;'>📊 거래 횟수: {st.session_state.stats['trade_count']}회</div>", unsafe_allow_html=True)
         
         st.divider()
-        
-        # 자동 새로고침을 위한 카운터
-        if 'refresh_counter' not in st.session_state:
-            st.session_state.refresh_counter = 0
-        
-        st.session_state.refresh_counter += 1
-        if st.session_state.refresh_counter % 10 == 0:  # 10번에 한 번 (약 1초) 새로고침
-            time.sleep(0.1)
-            st.rerun()
         
         # 현재 탭 상태 초기화 - 이동 후 탭 전환을 위해 필요
         if 'current_tab' not in st.session_state:
@@ -998,6 +988,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
