@@ -307,49 +307,26 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
             if i_name in items_info:
                 base = items_info[i_name]['base']
                 stock = i_info['stock']
-                initial_stock = initial_stocks.get(v_name, {}).get(i_name, 100)
                 
-                if initial_stock <= 0:
-                    initial_stock = 100
+                # ✅ 절대 재고량으로 가격 결정
+                if stock < 100:  # 재고 100개 미만
+                    price_factor = 2.0  # 2배 비쌈
+                elif stock < 500:  # 재고 500개 미만
+                    price_factor = 1.5  # 1.5배 비쌈
+                elif stock < 1000:  # 재고 1000개 미만
+                    price_factor = 1.2  # 1.2배 비쌈
+                elif stock < 2000:  # 재고 2000개 미만
+                    price_factor = 1.0  # 기준가
+                elif stock < 5000:  # 재고 5000개 미만
+                    price_factor = 0.8  # 0.8배 쌈
+                else:  # 재고 5000개 이상
+                    price_factor = 0.6  # 0.6배 쌈
                 
-                # ✅ 디버그: 재고 정보 출력
+                i_info['price'] = int(base * price_factor)
+                
+                # 디버그
                 if i_name == "생선" and v_name in ["한양", "부산"]:
-                    st.write(f"🐟 {v_name} 생선: 재고={stock}, 초기재고={initial_stock}, 비율={stock/initial_stock:.2f}")
-                
-                if stock <= 0:
-                    i_info['price'] = int(base * max_price_rate)
-                else:
-                    stock_ratio = stock / initial_stock
-                    
-                    # ✅ 가격 계산 로직
-                    if stock_ratio < 0.3:
-                        price_factor = 1.0 + (inventoryResponsivePrice / 3333)
-                    elif stock_ratio < 0.5:
-                        price_factor = 1.0 + (inventoryResponsivePrice / 5000)
-                    elif stock_ratio < 0.7:
-                        price_factor = 1.0 + (inventoryResponsivePrice / 10000)
-                    elif stock_ratio < 1.0:
-                        price_factor = 1.0 + (inventoryResponsivePrice / 25000)
-                    elif stock_ratio < 1.3:
-                        price_factor = 1.0
-                    elif stock_ratio < 1.6:
-                        price_factor = 1.0 - (inventoryResponsivePrice / 25000)
-                    else:
-                        price_factor = 1.0 - (inventoryResponsivePrice / 12500)
-                    
-                    old_price = i_info['price']
-                    i_info['price'] = int(base * price_factor)
-                    
-                    # ✅ 디버그: 가격 변경 정보
-                    if i_name == "생선" and v_name in ["한양", "부산"]:
-                        st.write(f"  → 가격: {old_price} -> {i_info['price']} (요인: {price_factor:.2f})")
-                    
-                    # 최소/최대 가격 제한 적용
-                    min_price = int(base * min_price_rate)
-                    if i_info['price'] < min_price:
-                        i_info['price'] = min_price
-                    if i_info['price'] > base * max_price_rate:
-                        i_info['price'] = int(base * max_price_rate)
+                    st.write(f"📊 {v_name} 생선: 재고={stock}, 가격={i_info['price']}냥")
                         
 def get_weight(player, items_info, merc_data):
     cw = 0
@@ -937,6 +914,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
