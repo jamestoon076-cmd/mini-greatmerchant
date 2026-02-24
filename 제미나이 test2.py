@@ -566,27 +566,12 @@ if doc:
         
         st.divider()
         
-        # 현재 탭 상태 초기화
+        # 현재 탭 상태 초기화 - 이동 후 탭 전환을 위해 필요
         if 'current_tab' not in st.session_state:
             st.session_state.current_tab = 0
             
-            tab1, tab2, tab3, tab4, tab5 = st.tabs(["🛒 저잣거리", "📦 인벤토리", "⚔️ 용병", "📊 통계", "⚙️ 이동"])
-        
-        # 현재 탭 설정 (선택된 탭을 세션에 저장)
-        # st.tabs는 자동으로 선택을 기억하지 않으므로, 세션 상태를 사용
-        if st.session_state.current_tab == 0:
-            tab1 = tab1
-        elif st.session_state.current_tab == 1:
-            tab2 = tab2
-        elif st.session_state.current_tab == 2:
-            tab3 = tab3
-        elif st.session_state.current_tab == 3:
-            tab4 = tab4
-        elif st.session_state.current_tab == 4:
-            tab5 = tab5
-        
-        # 선택된 탭 표시 (st.tabs는 자동으로 현재 탭을 기억하므로 이 부분은 필요 없음)
-        # 실제 탭 내용은 그대로 유지
+        # st.tabs 생성 - 이 변수들은 그대로 사용
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(["🛒 저잣거리", "📦 인벤토리", "⚔️ 용병", "📊 통계", "⚙️ 이동"])
         
         with tab1:
             if player['pos'] == "용병 고용소":
@@ -987,6 +972,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
