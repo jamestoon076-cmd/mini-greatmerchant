@@ -542,7 +542,7 @@ if doc:
                 st.markdown(f"<div class='event-message'>{message}</div>", unsafe_allow_html=True)
             st.session_state.events = []
         
-       # 상단 정보 부분
+      # 상단 정보 부분
         st.title(f"🏯 {player['pos']}")
         
         col1, col2 = st.columns(2)
@@ -550,13 +550,16 @@ if doc:
             st.metric("💰 소지금", f"{player['money']:,}냥")
         
         with col2:
+            cw, tw = get_weight(player, items_info, merc_data)
             st.metric("⚖️ 무게", f"{cw}/{tw}근")
         
-        # JavaScript로 실시간 업데이트되는 시계
+        # 남은 시간 계산
         seconds_per_month = int(settings.get('seconds_per_month', 180))
+        elapsed = time.time() - st.session_state.last_time_update
+        remaining = max(0, seconds_per_month - int(elapsed))
         last_update = st.session_state.last_time_update
         
-        # HTML 컴포넌트로 실시간 시계 표시
+        # JavaScript로 실시간 업데이트되는 시계
         clock_html = f"""
         <div style="display: flex; justify-content: space-between; margin: 10px 0; padding: 10px; background-color: #f0f2f6; border-radius: 10px;">
             <div style="text-align: center; flex: 1;">
@@ -1024,6 +1027,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
