@@ -915,35 +915,39 @@ if doc:
                 
                 if move_options:
                     selected = st.selectbox("이동할 마을", move_options)
-                    if st.button("🚀 이동", use_container_width=True):
-                        dest, cost = move_dict[selected]
-                        if player['money'] >= cost:
-                            player['money'] -= cost
-                            # 현재 도시의 로그 삭제 (이동 전 도시)
-                            current_city = player['pos']
-                            
-                            # 거래 로그 삭제
-                            keys_to_delete = []
-                            for key in list(st.session_state.trade_logs.keys()):
-                                if key.startswith(f"{current_city}_"):
-                                    keys_to_delete.append(key)
-                            for key in keys_to_delete:
-                                del st.session_state.trade_logs[key]
-                            
-                            # 결과 로그 삭제
-                            result_keys_to_delete = []
-                            for key in list(st.session_state.keys()):
-                                if key.startswith(f"result_{current_city}_"):
-                                    result_keys_to_delete.append(key)
-                            for key in result_keys_to_delete:
-                                del st.session_state[key]
-                            
-                            player['pos'] = dest
-                            money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
-                            st.success(f"✅ {dest}로 이동했습니다!")
-                            st.rerun()
-                        else:
-                            st.error("❌ 잔액 부족")
+                        if st.button("🚀 이동", use_container_width=True):
+                            dest, cost = move_dict[selected]
+                            if player['money'] >= cost:
+                                player['money'] -= cost
+                                # 현재 도시의 로그 삭제 (이동 전 도시)
+                                current_city = player['pos']
+                                
+                                # 거래 로그 삭제
+                                keys_to_delete = []
+                                for key in list(st.session_state.trade_logs.keys()):
+                                    if key.startswith(f"{current_city}_"):
+                                        keys_to_delete.append(key)
+                                for key in keys_to_delete:
+                                    del st.session_state.trade_logs[key]
+                                
+                                # 결과 로그 삭제
+                                result_keys_to_delete = []
+                                for key in list(st.session_state.keys()):
+                                    if key.startswith(f"result_{current_city}_"):
+                                        result_keys_to_delete.append(key)
+                                for key in result_keys_to_delete:
+                                    del st.session_state[key]
+                                
+                                player['pos'] = dest
+                                money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
+                                
+                                # ✅ 이동 후 저잣거리 탭으로 전환
+                                st.session_state.current_tab = 0  # 0 = 첫 번째 탭 (저잣거리)
+                                
+                                st.success(f"✅ {dest}로 이동했습니다!")
+                                st.rerun()
+                            else:
+                                st.error("❌ 잔액 부족")
                 else:
                     st.write("이동 가능한 마을이 없습니다")
             
@@ -963,6 +967,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
