@@ -221,16 +221,18 @@ def update_game_time(player, settings, market_data, initial_stocks):
         st.session_state.last_time_update = current_time
         return player, []
     
+    # DB에서 설정값 가져오기 (180초 = 1달)
     seconds_per_month = int(settings.get('seconds_per_month', 180))
     seconds_per_week = seconds_per_month / 4
     
     elapsed = current_time - st.session_state.last_time_update
-    weeks_passed = int(elapsed // seconds_per_week) # 몇 주가 지났는지 계산
+    
+    # ✅ 정수 나눗셈(//)으로 몇 주가 지났는지 정확히 계산
+    weeks_passed = int(elapsed // seconds_per_week)
     
     events = []
     
     if weeks_passed > 0:
-        # ✅ 소급 적용: 지난 주수만큼 정확히 업데이트
         for _ in range(weeks_passed):
             player['week'] += 1
             if player['week'] > 4:
@@ -240,11 +242,10 @@ def update_game_time(player, settings, market_data, initial_stocks):
                     player['month'] = 1
                     player['year'] += 1
         
-        # 🔥 핵심: 기준점을 '현재 시간'이 아니라 '지나간 시간만큼만' 정확히 갱신
-        # 이렇게 해야 나머지 잔여 초(예: 0.5초 등)가 보존되어 0초 현상이 사라집니다.
+        # 🔥 중요: 기준점을 현재시간이 아닌 '지나간 주차만큼'만 정확히 더해줌
         st.session_state.last_time_update += weeks_passed * seconds_per_week
         
-        # 메시지 예약 (5초 노출용)
+        # 5초간 띄울 메시지 데이터 생성
         st.session_state.event_display = {
             "message": f"🌟 {player['year']}년 {player['month']}월 {player['week']}주차 소식이 도착했습니다.",
             "time": time.time()
@@ -555,8 +556,7 @@ def save_player_data(doc, player, stats, device_id):
 doc = connect_gsheet()
 init_session_state()
 
-# ⭐ 1. 자동 새로고침 설정 (1초마다 코드를 다시 실행시켜 시간을 깎음)
-# 이 코드가 맨 위에 있어야 에러 없이 1초마다 숫자가 바뀝니다.
+# ⭐ 1. 자동 새로고침 (반드시 코드 최상단에 위치)
 from streamlit_autorefresh import st_autorefresh
 st_autorefresh(interval=1000, key="gametimer_refresh")
 
@@ -565,6 +565,7 @@ if doc:
         st.title("🏯 조선거상 미니")
         st.markdown("---")
         
+        # 데이터 로드
         settings, items_info, merc_data, villages, initial_stocks, slots = load_game_data()        
         
         if slots:
@@ -579,6 +580,7 @@ if doc:
             if st.button("🎮 게임 시작", use_container_width=True):
                 selected = next((s for s in slots if s['slot'] == slot_choice), None)
                 if selected:
+                    # ✅ 모든 중요 데이터를 세션에 저장 (NameError 방지 핵심)
                     st.session_state.player = selected
                     st.session_state.settings = settings
                     st.session_state.items_info = items_info
@@ -586,7 +588,6 @@ if doc:
                     st.session_state.villages = villages
                     st.session_state.initial_stocks = initial_stocks
                     st.session_state.last_time_update = time.time()
-                    st.session_state.last_update = time.time() # 추가
                     st.session_state.trade_logs = {}
                     
                     market_data = {}
@@ -596,71 +597,63 @@ if doc:
                             for item_name, stock in v_data['items'].items():
                                 market_data[v_name][item_name] = {'stock': stock, 'price': items_info[item_name]['base']}
                     
-                    update_prices(settings, items_info, market_data, initial_stocks)
                     st.session_state.market_data = market_data
                     st.session_state.game_started = True
                     st.rerun()
     
     else:
-        # 🎮 게임 화면 시작
+        # 🎮 2. 게임 시작 후 데이터 불러오기
         player = st.session_state.player
         settings = st.session_state.settings
         items_info = st.session_state.items_info
         merc_data = st.session_state.merc_data
         market_data = st.session_state.market_data
         initial_stocks = st.session_state.initial_stocks
-        
-        # ⭐ 2. 시간 시스템 업데이트 (1주일마다 알림 생성)
-        player, events = update_game_time(player, settings, market_data, initial_stocks)
-        
-        # 1주일마다 뜨는 메시지를 토스트 알림으로 표시
-        if events:
-            for etype, emsg in events:
-                if etype == "week":
-                    st.toast(emsg, icon="📅")
-                else:
-                    st.session_state.events.append((etype, emsg))
+        villages = st.session_state.villages  # 👈 이제 NameError가 나지 않습니다.
 
+        # 🕒 3. 시간 시스템 업데이트
+        # update_game_time 함수 내에서 기준점을 += 연산으로 밀어줘야 폭주를 막습니다.
+        player, _ = update_game_time(player, settings, market_data, initial_stocks)
+
+        # ⚖️ 4. 가격 및 무게 업데이트
         update_prices(settings, items_info, market_data, initial_stocks)
         cw, tw = get_weight(player, items_info, merc_data)
-        
-        # --- 상단 정보 표시 ---
-        st.title(f"🏯 {player['pos']}")
 
-        # ⭐ 상단 알림 메시지 (5초 노출 로직)
+        # 📢 5. 상단 알림 메시지 (5초 노출 로직)
         if 'event_display' in st.session_state:
-            msg_data = st.session_state.event_display
-            # 현재 시간과 메시지 발생 시간 비교 (5초 기준)
-            if time.time() - msg_data['time'] < 5:
-                st.info(msg_data['message']) # 상단에 파란색 알림 박스 출력
+            ed = st.session_state.event_display
+            if time.time() - ed['time'] < 5:
+                st.info(ed['message'])
             else:
-                # 5초가 지나면 세션에서 삭제하여 화면에서 치움
                 del st.session_state.event_display
 
-        # 이후 기존 col1, col2, col3, col4 코드가 이어짐
-
+        # --- 상단 UI 표시 (디자인 유지) ---
+        st.title(f"🏯 {player['pos']}")
+        
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("💰 소지금", f"{player['money']:,}냥")
         col2.metric("⚖️ 무게", f"{cw}/{tw}근")
         col3.metric("📅 시간", get_time_display(player))
         
-        # ⭐ 3. 실시간 카운트다운 계산
-        seconds_per_month = int(settings.get('seconds_per_month', 180))
-        seconds_per_week = seconds_per_month / 4
-        elapsed_since_update = time.time() - st.session_state.last_time_update
-        remaining = max(0, int(seconds_per_week - elapsed_since_update))
+        # ⏳ 6. 실시간 카운트다운 계산 (0초 멈춤 보정)
+        sec_per_month = int(settings.get('seconds_per_month', 180))
+        sec_per_week = sec_per_month / 4
+        elapsed_since_ref = time.time() - st.session_state.last_time_update
         
-        # 44초에서 멈추지 않고 1초마다 깎이게 함
+        remaining = max(0, int(sec_per_week - elapsed_since_ref))
+        if remaining <= 0: remaining = int(sec_per_week) # 즉시 다음 주로 시각적 갱신
+            
         col4.metric("⏰ 다음 주까지", f"{remaining}초")
 
-        # 기존 탭 메뉴 코드 생략 (여기에 기존 탭 메뉴 코드들이 쭉 이어지면 됩니다)
-                
-        # 현재 탭 상태 초기화 - 이동 후 탭 전환을 위해 필요
+        # 📑 7. 탭 메뉴 구성
         if 'current_tab' not in st.session_state:
             st.session_state.current_tab = 0
             
-        # st.tabs 생성 - 이 변수들은 그대로 사용
         tab1, tab2, tab3, tab4, tab5 = st.tabs(["🛒 저잣거리", "📦 인벤토리", "⚔️ 용병", "📊 통계", "⚙️ 이동"])
+        
+        with tab1:
+            # 기존 tab1 내용 (저잣거리 판매/구매 등)
+            pass
         
         with tab1:
             if player['pos'] == "용병 고용소":
@@ -1061,6 +1054,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
