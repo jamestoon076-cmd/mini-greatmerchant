@@ -299,11 +299,6 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
     
     inventoryResponsivePrice = settings.get('inventoryResponsivePrice', 5000)
     
-    # ✅ 디버그 컨테이너 (화면 상단에 표시)
-    debug_container = st.empty()
-    debug_messages = []
-    debug_messages.append(f"🔍 update_prices() 호출됨 - inventoryResponsivePrice: {inventoryResponsivePrice}")
-    
     for v_name, v_data in market_data.items():
         if v_name == "용병 고용소":
             continue
@@ -317,15 +312,16 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
                 if initial_stock <= 0:
                     initial_stock = 100
                 
-                # ✅ 생선 가격 계산 전 상태 저장
+                # ✅ 디버그: 재고 정보 출력
                 if i_name == "생선" and v_name in ["한양", "부산"]:
-                    debug_messages.append(f"🔍 [{v_name}] {i_name} - 재고: {stock}, 초기재고: {initial_stock}, 비율: {stock/initial_stock:.2f}")
+                    st.write(f"🐟 {v_name} 생선: 재고={stock}, 초기재고={initial_stock}, 비율={stock/initial_stock:.2f}")
                 
                 if stock <= 0:
                     i_info['price'] = int(base * max_price_rate)
                 else:
                     stock_ratio = stock / initial_stock
                     
+                    # ✅ 가격 계산 로직
                     if stock_ratio < 0.3:
                         price_factor = 1.0 + (inventoryResponsivePrice / 3333)
                     elif stock_ratio < 0.5:
@@ -344,9 +340,9 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
                     old_price = i_info['price']
                     i_info['price'] = int(base * price_factor)
                     
-                    # ✅ 생선 가격 계산 후 상태 저장
+                    # ✅ 디버그: 가격 변경 정보
                     if i_name == "생선" and v_name in ["한양", "부산"]:
-                        debug_messages.append(f"🔍 [{v_name}] {i_name} - 가격: {old_price} -> {i_info['price']} (요인: {price_factor:.2f})")
+                        st.write(f"  → 가격: {old_price} -> {i_info['price']} (요인: {price_factor:.2f})")
                     
                     # 최소/최대 가격 제한 적용
                     min_price = int(base * min_price_rate)
@@ -354,14 +350,6 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
                         i_info['price'] = min_price
                     if i_info['price'] > base * max_price_rate:
                         i_info['price'] = int(base * max_price_rate)
-    
-                    # ✅ 디버그 메시지를 화면에 표시
-                    if debug_messages:
-                        with debug_container.container():
-                            st.markdown("### 🔍 디버그 정보")
-                            for msg in debug_messages[-10:]:  # 최근 10개만 표시
-                                st.text(msg)
-                            st.markdown("---")
                         
 def get_weight(player, items_info, merc_data):
     cw = 0
@@ -949,6 +937,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
