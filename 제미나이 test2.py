@@ -221,18 +221,16 @@ def update_game_time(player, settings, market_data, initial_stocks):
         st.session_state.last_time_update = current_time
         return player, []
     
-    # 설정값 (180초 = 1달)
     seconds_per_month = int(settings.get('seconds_per_month', 180))
-    seconds_per_week = seconds_per_month / 4  # 45초
+    seconds_per_week = seconds_per_month / 4
     
-    # 마지막 업데이트 이후 흐른 시간
     elapsed = current_time - st.session_state.last_time_update
-    weeks_passed = int(elapsed / seconds_per_week)
+    weeks_passed = int(elapsed // seconds_per_week) # 몇 주가 지났는지 계산
     
     events = []
     
     if weeks_passed > 0:
-        # 시간 업데이트 로직
+        # ✅ 소급 적용: 지난 주수만큼 정확히 업데이트
         for _ in range(weeks_passed):
             player['week'] += 1
             if player['week'] > 4:
@@ -242,24 +240,16 @@ def update_game_time(player, settings, market_data, initial_stocks):
                     player['month'] = 1
                     player['year'] += 1
         
-        # 기준점 갱신
-        #st.session_state.last_time_update += weeks_passed * seconds_per_week
-        #events.append(("week", f"🌟 {player['year']}년 {player['month']}월 {player['week']}주차 소식이 도착했습니다."))
-
-        # 1주일 알림을 세션에 시간과 함께 저장 (5초 노출용)
-        st.session_state.event_display = {
-        "message": f"🌟 {player['year']}년 {player['month']}월 {player['week']}주차 소식이 도착했습니다.",
-        "time": time.time()
-        }
+        # 🔥 핵심: 기준점을 '현재 시간'이 아니라 '지나간 시간만큼만' 정확히 갱신
+        # 이렇게 해야 나머지 잔여 초(예: 0.5초 등)가 보존되어 0초 현상이 사라집니다.
+        st.session_state.last_time_update += weeks_passed * seconds_per_week
         
-        # 재고 초기화 체크 (180초 주기가 완료될 때)
-        if player['week'] == 1:
-            for v_name in market_data:
-                if v_name in initial_stocks:
-                    for item_name in market_data[v_name]:
-                        market_data[v_name][item_name]['stock'] = initial_stocks[v_name][item_name]
-            events.append(("reset", "🔄 새 달을 맞아 재고가 초기화되었습니다."))
-
+        # 메시지 예약 (5초 노출용)
+        st.session_state.event_display = {
+            "message": f"🌟 {player['year']}년 {player['month']}월 {player['week']}주차 소식이 도착했습니다.",
+            "time": time.time()
+        }
+    
     return player, events
     
     if months_passed > 0:
@@ -1071,6 +1061,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
