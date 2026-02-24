@@ -319,12 +319,21 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
                     stock_ratio = stock / initial_stock
                     
                     # ✅ inventoryResponsivePrice를 직접 사용한 가격 계산
+                    # inventoryResponsivePrice가 5000일 때:
+                    # - 재고 30% 미만: 가격 250% (1.0 + 1.5)
+                    # - 재고 50% 미만: 가격 200% (1.0 + 1.0)
+                    # - 재고 70% 미만: 가격 150% (1.0 + 0.5)
+                    # - 재고 100% 미만: 가격 120% (1.0 + 0.2)
+                    # - 재고 130% 미만: 가격 100% (1.0)
+                    # - 재고 160% 미만: 가격 80% (1.0 - 0.2)
+                    # - 재고 160% 이상: 가격 60% (1.0 - 0.4)
+                    
                     if stock_ratio < 0.3:  # 재고 30% 미만
-                        price_factor = 1.0 + (inventoryResponsivePrice / 10000)  # 5000 -> 1.5 (150%)
+                        price_factor = 1.0 + (inventoryResponsivePrice / 3333)  # 5000 -> 2.5 (250%)
                     elif stock_ratio < 0.5:  # 재고 50% 미만
-                        price_factor = 1.0 + (inventoryResponsivePrice / 12500)  # 5000 -> 1.4 (140%)
+                        price_factor = 1.0 + (inventoryResponsivePrice / 5000)  # 5000 -> 2.0 (200%)
                     elif stock_ratio < 0.7:  # 재고 70% 미만
-                        price_factor = 1.0 + (inventoryResponsivePrice / 16667)  # 5000 -> 1.3 (130%)
+                        price_factor = 1.0 + (inventoryResponsivePrice / 10000)  # 5000 -> 1.5 (150%)
                     elif stock_ratio < 1.0:  # 재고 100% 미만
                         price_factor = 1.0 + (inventoryResponsivePrice / 25000)  # 5000 -> 1.2 (120%)
                     elif stock_ratio < 1.3:  # 재고 130% 미만
@@ -332,7 +341,7 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
                     elif stock_ratio < 1.6:  # 재고 160% 미만
                         price_factor = 1.0 - (inventoryResponsivePrice / 25000)  # 5000 -> 0.8 (80%)
                     else:  # 재고 160% 이상
-                        price_factor = 1.0 - (inventoryResponsivePrice / 16667)  # 5000 -> 0.7 (70%)
+                        price_factor = 1.0 - (inventoryResponsivePrice / 12500)  # 5000 -> 0.6 (60%)
                     
                     i_info['price'] = int(base * price_factor)
                     
@@ -923,6 +932,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
