@@ -558,12 +558,21 @@ if doc:
         time_placeholder.metric("📅 시간", get_time_display(player))
         
         # 남은 시간 계산
+            # 1. 설정값 가져오기 (기본 180초)
         seconds_per_month = int(settings.get('seconds_per_month', 180))
-        elapsed = time.time() - st.session_state.last_time_update
-        remaining = max(0, seconds_per_month - int(elapsed))
+        seconds_per_week = seconds_per_month / 4  # 1주일은 45초
         
+            # 2. 마지막 업데이트 이후 흐른 시간 계산
+        elapsed_since_last_update = time.time() - st.session_state.last_time_update
+        
+            # 3. 이번 주차가 끝나기까지 남은 시간 계산
+        # elapsed_since_last_update가 45초를 넘어가면 update_game_time에서 처리될 것이므로
+        # 여기서는 45초에서 뺀 값을 보여줍니다.
+        remaining_in_week = max(0, int(seconds_per_week - elapsed_since_last_update))
+        
+            # 4. UI 출력
         time_left_placeholder = col4.empty()
-        time_left_placeholder.metric("⏰ 다음 달까지", f"{remaining}초")
+        time_left_placeholder.metric("⏰ 다음 주까지", f"{remaining_in_week}초")
         
         # 한 번에 정의되는 단일 스크립트 (변수 정의 → 함수 → 실행 순서 보장)
         st.markdown(f"""
@@ -1002,6 +1011,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
