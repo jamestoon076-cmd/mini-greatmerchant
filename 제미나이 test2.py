@@ -561,7 +561,7 @@ if doc:
         
         # JavaScript로 실시간 업데이트되는 시계
         clock_html = f"""
-        <div style="display: flex; justify-content: space-between; margin: 10px 0; padding: 10px; background-color: #f0f2f6; border-radius: 10px;">
+        <div style="display: flex; justify-content: space-between; margin: 10px 0; padding: 15px; background-color: #f0f2f6; border-radius: 10px;">
             <div style="text-align: center; flex: 1;">
                 <div style="font-size: 14px; color: #666;">📅 게임 시간</div>
                 <div id="game_time" style="font-size: 20px; font-weight: bold;">{get_time_display(player)}</div>
@@ -573,38 +573,43 @@ if doc:
         </div>
         
         <script>
-        // 서버에서 받은 마지막 업데이트 시간 (초 단위 타임스탬프)
+        // 서버에서 받은 마지막 업데이트 시간
         const lastUpdateTime = {last_update};
         const secondsPerMonth = {seconds_per_month};
         
-        // 현재 게임 시간 정보
-        let currentYear = {player['year']};
-        let currentMonth = {player['month']};
-        let currentWeek = {player['week']};
-        
         function updateClock() {{
-            // 현재 시간 계산
-            const now = Date.now() / 1000; // 초 단위
-            const elapsed = now - lastUpdateTime;
-            
-            // 경과한 개월 수 계산
-            const monthsPassed = Math.floor(elapsed / secondsPerMonth);
-            
-            if (monthsPassed > 0) {{
-                // 새로고침 필요 (게임 시간이 변경됨)
-                location.reload();
-                return;
+            try {{
+                // 현재 시간 계산
+                const now = Date.now() / 1000;
+                const elapsed = now - lastUpdateTime;
+                
+                // 남은 초 계산
+                const remainingSeconds = Math.max(0, secondsPerMonth - (elapsed % secondsPerMonth));
+                
+                // 시간 표시 업데이트
+                const timeLeftElement = document.getElementById('time_left');
+                if (timeLeftElement) {{
+                    timeLeftElement.innerText = Math.floor(remainingSeconds) + '초';
+                }}
+                
+                // 경과한 개월 수 확인
+                const monthsPassed = Math.floor(elapsed / secondsPerMonth);
+                if (monthsPassed > 0) {{
+                    // 1초 후 새로고침 (게임 시간 업데이트를 위해)
+                    setTimeout(function() {{
+                        location.reload();
+                    }}, 1000);
+                }}
+            }} catch (e) {{
+                console.error("Clock error:", e);
             }}
-            
-            // 남은 초 계산
-            const remainingSeconds = Math.max(0, secondsPerMonth - (elapsed % secondsPerMonth));
-            
-            // 시간 표시 업데이트
-            document.getElementById('time_left').innerText = Math.floor(remainingSeconds) + '초';
         }}
         
         // 1초마다 업데이트
         setInterval(updateClock, 1000);
+        
+        // 즉시 한 번 실행
+        updateClock();
         </script>
         """
         
@@ -614,7 +619,7 @@ if doc:
             for event_type, message in st.session_state.events:
                 if "주차" in message or "월이 시작" in message:
                     st.markdown(f"<div class='event-message'>{message}</div>", unsafe_allow_html=True)
-            # 이벤트 초기화
+            # 이미 표시한 이벤트는 제거
             st.session_state.events = [e for e in st.session_state.events if not ("주차" in e[1] or "월이 시작" in e[1])]
         
         st.markdown(f"<div style='text-align: right; color: #666; margin-bottom: 10px;'>📊 거래 횟수: {st.session_state.stats['trade_count']}회</div>", unsafe_allow_html=True)
@@ -1027,6 +1032,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
