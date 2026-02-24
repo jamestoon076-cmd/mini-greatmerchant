@@ -842,6 +842,58 @@ if doc:
                 st.caption(f"💰 해고 시 {int(fire_refund_rate*100)}% 환불")
             else:
                 st.write("고용한 용병이 없습니다")
+
+        with tab4:
+            st.subheader("📊 거래 통계")
+            
+            # 전체 통계 요약
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("💰 총 구매액", f"{st.session_state.stats['total_spent']:,}냥")
+                st.metric("📦 총 구매량", f"{st.session_state.stats['total_bought']:,}개")
+                st.metric("🔄 총 거래 횟수", f"{st.session_state.stats['trade_count']}회")
+            
+            with col2:
+                st.metric("💵 총 판매액", f"{st.session_state.stats['total_earned']:,}냥")
+                st.metric("📦 총 판매량", f"{st.session_state.stats['total_sold']:,}개")
+                
+                # 순이익 계산
+                net_profit = st.session_state.stats['total_earned'] - st.session_state.stats['total_spent']
+                profit_color = "🔴" if net_profit < 0 else "🟢"
+                st.metric(f"{profit_color} 순이익", f"{net_profit:,}냥")
+            
+            st.divider()
+            
+            # 거래 내역 (최근 거래 로그)
+            st.subheader("📋 최근 거래 내역")
+            
+            if st.session_state.trade_logs:
+                # 최근 10개 거래 로그만 표시
+                recent_logs = []
+                for key, logs in list(st.session_state.trade_logs.items())[-5:]:
+                    if logs:
+                        recent_logs.extend(logs[-3:])  # 각 거래의 마지막 3개 로그만
+                
+                if recent_logs:
+                    for log in recent_logs[-10:]:  # 최대 10개만 표시
+                        st.markdown(f"<div class='trade-line'>{log}</div>", unsafe_allow_html=True)
+                else:
+                    st.info("거래 내역이 없습니다.")
+            else:
+                st.info("거래 내역이 없습니다.")
+            
+            st.divider()
+            
+            # 통계 초기화 버튼
+            if st.button("🔄 통계 초기화", use_container_width=True):
+                st.session_state.stats = {
+                    'total_bought': 0,
+                    'total_sold': 0,
+                    'total_spent': 0,
+                    'total_earned': 0,
+                    'trade_count': 0
+                }
+                st.rerun()
         
         with tab5:
             st.subheader("⚙️ 게임 메뉴")
@@ -911,6 +963,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
