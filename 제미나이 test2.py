@@ -542,10 +542,11 @@ if doc:
                 st.markdown(f"<div class='event-message'>{message}</div>", unsafe_allow_html=True)
             st.session_state.events = []
         
-     # 상단 정보 부분
+    # 상단 정보 부분
         st.title(f"🏯 {player['pos']}")
         
         col1, col2, col3, col4 = st.columns(4)
+        
         money_placeholder = col1.empty()
         money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
         
@@ -555,33 +556,43 @@ if doc:
         time_placeholder = col3.empty()
         time_placeholder.metric("📅 시간", get_time_display(player))
         
+        # countdown용 placeholder
+        time_left_placeholder = col4.empty()
+        
+        # 초기값 표시 (서버에서 계산한 값)
         seconds_per_month = int(settings.get('seconds_per_month', 180))
         elapsed = time.time() - st.session_state.last_time_update
         remaining = max(0, seconds_per_month - int(elapsed))
-        time_left_placeholder = col4.empty()
         time_left_placeholder.metric("⏰ 다음 달까지", f"{remaining}초")
         
-        # JavaScript를 사용한 실시간 업데이트 (시간초만)
-        st.markdown("""
+        # JavaScript로 실시간 카운트다운 (새로고침 없이!)
+        st.markdown(f"""
         <script>
-        // 1초마다 페이지 새로고침
-        setTimeout(function() {
-            location.reload();
-        }, 1000);
+            const startTime = {int(st.session_state.last_time_update)};
+            const duration = {seconds_per_month};
+        
+            function updateCountdown() {{
+                const now = Math.floor(Date.now() / 1000);
+                const elapsed = now - startTime;
+                let remaining = duration - (elapsed % duration);
+                if (remaining < 0) remaining = 0;
+        
+                const elem = window.parent.document.querySelector('[data-testid="stMetricLabel"] + div');  // 마지막 metric 값 잡기 (조금 불안정할 수 있음)
+                if (elem) {{
+                    elem.innerText = Math.floor(remaining) + '초';
+                }}
+        
+                // 한 달 가까이 지났을 때만 서버 rerun (가격/이벤트 갱신용)
+                if (elapsed >= duration - 3) {{
+                    setTimeout(() => {{ location.reload(); }}, 1500);
+                }}
+            }}
+        
+            setInterval(updateCountdown, 1000);
+            updateCountdown();
         </script>
         """, unsafe_allow_html=True)
-        
-        # 이벤트 메시지 표시
-        if st.session_state.events:
-            for event_type, message in st.session_state.events:
-                if "주차" in message or "월이 시작" in message:
-                    st.markdown(f"<div class='event-message'>{message}</div>", unsafe_allow_html=True)
-            st.session_state.events = [e for e in st.session_state.events if not ("주차" in e[1] or "월이 시작" in e[1])]
-        
-        st.markdown(f"<div style='text-align: right; color: #666; margin-bottom: 10px;'>📊 거래 횟수: {st.session_state.stats['trade_count']}회</div>", unsafe_allow_html=True)
-        
-        st.divider()
-        
+                
         # 현재 탭 상태 초기화 - 이동 후 탭 전환을 위해 필요
         if 'current_tab' not in st.session_state:
             st.session_state.current_tab = 0
@@ -988,6 +999,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
