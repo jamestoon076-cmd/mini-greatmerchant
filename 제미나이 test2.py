@@ -221,8 +221,27 @@ def update_game_time(player, settings, market_data, initial_stocks):
         return player, []
     
     elapsed = current_time - st.session_state.last_time_update
+    # --- 시간 표시 및 자동 리프레시 로직 ---
+
+    # 1. 1초마다 페이지를 강제로 다시 그리게 함 (최상단에 이미 있다면 중복 작성 금지)
+    # 이 줄이 있어야 1초마다 아래의 'remaining' 계산이 다시 수행됩니다.
+    from streamlit_autorefresh import st_autorefresh
+    st_autorefresh(interval=1000, key="timer_refresh")
+    
+    # 2. 설정값 및 남은 시간 계산
     seconds_per_month = int(settings.get('seconds_per_month', 180))
-    months_passed = int(elapsed / seconds_per_month)
+    seconds_per_week = seconds_per_month / 4  # 1주일 기준 (45초)
+    
+    # 현재 시각에서 마지막 업데이트 시점을 빼서 이번 주가 몇 초 지났는지 확인
+    elapsed = time.time() - st.session_state.last_time_update
+    remaining = max(0, int(seconds_per_week - elapsed))
+    
+    # 3. 화면에 출력 (metric 혹은 write 사용)
+    # st.empty()를 사용하면 매초 숫자가 바뀌는 효과가 더 깔끔합니다.
+    placeholder = st.empty()
+    with placeholder.container():
+        st.metric("⏰ 다음 주까지", f"{remaining}초")
+        st.write(f"📅 현재 시간: {get_time_display(player)}")
     
     events = []
     
@@ -1011,6 +1030,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
