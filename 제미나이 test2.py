@@ -557,7 +557,7 @@ if doc:
         seconds_per_month = int(settings.get('seconds_per_month', 180))
         elapsed = time.time() - st.session_state.last_time_update
         remaining = max(0, seconds_per_month - int(elapsed))
-        last_update = st.session_state.last_time_update
+        last_update_seconds = int(st.session_state.last_time_update)
         
         # HTML + JavaScript로 실시간 업데이트
         clock_html = f"""
@@ -1032,6 +1032,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
