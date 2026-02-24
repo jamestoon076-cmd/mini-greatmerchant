@@ -542,7 +542,7 @@ if doc:
                 st.markdown(f"<div class='event-message'>{message}</div>", unsafe_allow_html=True)
             st.session_state.events = []
         
-     # 상단 정보 부분
+      # 상단 정보 부분
         st.title(f"🏯 {player['pos']}")
         
         col1, col2 = st.columns(2)
@@ -559,54 +559,67 @@ if doc:
         remaining = max(0, seconds_per_month - int(elapsed))
         last_update = st.session_state.last_time_update
         
-        # HTML + JavaScript로 실시간 업데이트
-        seconds_per_month = int(settings.get('seconds_per_month', 180))
-elapsed = time.time() - st.session_state.last_time_update
-remaining = max(0, seconds_per_month - int(elapsed))
-
-last_update_seconds = int(st.session_state.last_time_update)
-
-clock_html = f"""
-<div style="display: flex; justify-content: space-between; margin: 10px 0; padding: 15px; background-color: #f0f2f6; border-radius: 10px;">
-    <div style="text-align: center; flex: 1;">
-        <div style="font-size: 14px; color: #666;">📅 게임 시간</div>
-        <div id="game_time" style="font-size: 20px; font-weight: bold;">{get_time_display(player)}</div>
-    </div>
-    <div style="text-align: center; flex: 1;">
-        <div style="font-size: 14px; color: #666;">⏰ 다음 달까지</div>
-        <div id="time_left" style="font-size: 20px; font-weight: bold;">{remaining}초</div>
-    </div>
-</div>
-
-<script>
-const lastUpdateTime = {last_update_seconds};
-const secondsPerMonth = {seconds_per_month};
-
-function updateClock() {{
-    const now = Date.now() / 1000;
-    const elapsed = now - lastUpdateTime;
-    let remaining = secondsPerMonth - (elapsed % secondsPerMonth);
-    if (remaining < 0 || remaining > secondsPerMonth) remaining = secondsPerMonth;
-
-    document.getElementById('time_left').innerText = Math.floor(remaining) + '초';
-
-    if (elapsed >= secondsPerMonth - 2) {{
-        setTimeout(() => location.reload(), 1000);
-    }}
-}}
-
-setInterval(updateClock, 1000);
-updateClock();
-</script>
-"""
-
-st.markdown(clock_html, unsafe_allow_html=True)
+        # JavaScript로 실시간 업데이트되는 시계
+        clock_html = f"""
+        <div style="display: flex; justify-content: space-between; margin: 10px 0; padding: 15px; background-color: #f0f2f6; border-radius: 10px;">
+            <div style="text-align: center; flex: 1;">
+                <div style="font-size: 14px; color: #666;">📅 게임 시간</div>
+                <div id="game_time" style="font-size: 20px; font-weight: bold;">{get_time_display(player)}</div>
+            </div>
+            <div style="text-align: center; flex: 1;">
+                <div style="font-size: 14px; color: #666;">⏰ 다음 달까지</div>
+                <div id="time_left" style="font-size: 20px; font-weight: bold;">{remaining}초</div>
+            </div>
+        </div>
         
-        # 이벤트 메시지 표시
+        <script>
+        // 서버에서 받은 마지막 업데이트 시간
+        const lastUpdateTime = {last_update};
+        const secondsPerMonth = {seconds_per_month};
+        
+        function updateClock() {{
+            try {{
+                // 현재 시간 계산
+                const now = Date.now() / 1000;
+                const elapsed = now - lastUpdateTime;
+                
+                // 남은 초 계산
+                const remainingSeconds = Math.max(0, secondsPerMonth - (elapsed % secondsPerMonth));
+                
+                // 시간 표시 업데이트
+                const timeLeftElement = document.getElementById('time_left');
+                if (timeLeftElement) {{
+                    timeLeftElement.innerText = Math.floor(remainingSeconds) + '초';
+                }}
+                
+                // 경과한 개월 수 확인
+                const monthsPassed = Math.floor(elapsed / secondsPerMonth);
+                if (monthsPassed > 0) {{
+                    // 1초 후 새로고침 (게임 시간 업데이트를 위해)
+                    setTimeout(function() {{
+                        location.reload();
+                    }}, 1000);
+                }}
+            }} catch (e) {{
+                console.error("Clock error:", e);
+            }}
+        }}
+        
+        // 1초마다 업데이트
+        setInterval(updateClock, 1000);
+        
+        // 즉시 한 번 실행
+        updateClock();
+        </script>
+        """
+        
+        st.markdown(clock_html, unsafe_allow_html=True)
+        
         if st.session_state.events:
             for event_type, message in st.session_state.events:
                 if "주차" in message or "월이 시작" in message:
                     st.markdown(f"<div class='event-message'>{message}</div>", unsafe_allow_html=True)
+            # 이미 표시한 이벤트는 제거
             st.session_state.events = [e for e in st.session_state.events if not ("주차" in e[1] or "월이 시작" in e[1])]
         
         st.markdown(f"<div style='text-align: right; color: #666; margin-bottom: 10px;'>📊 거래 횟수: {st.session_state.stats['trade_count']}회</div>", unsafe_allow_html=True)
@@ -1019,10 +1032,6 @@ st.markdown(clock_html, unsafe_allow_html=True)
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
-
-
-
-
 
 
 
