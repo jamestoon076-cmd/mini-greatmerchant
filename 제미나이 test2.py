@@ -545,33 +545,74 @@ if doc:
        # 상단 정보 부분
         st.title(f"🏯 {player['pos']}")
         
-        col1, col2, col3, col4 = st.columns(4)
-        money_placeholder = col1.empty()
-        money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("💰 소지금", f"{player['money']:,}냥")
         
-        weight_placeholder = col2.empty()
-        weight_placeholder.metric("⚖️ 무게", f"{cw}/{tw}근")
+        with col2:
+            st.metric("⚖️ 무게", f"{cw}/{tw}근")
         
-        time_placeholder = col3.empty()
-        time_placeholder.metric("📅 시간", get_time_display(player))
-        
+        # JavaScript로 실시간 업데이트되는 시계
         seconds_per_month = int(settings.get('seconds_per_month', 180))
-        elapsed = time.time() - st.session_state.last_time_update
-        remaining = max(0, seconds_per_month - int(elapsed))
-        time_left_placeholder = col4.empty()
-        time_left_placeholder.metric("⏰ 다음 달까지", f"{remaining}초")
+        last_update = st.session_state.last_time_update
         
-        # JavaScript를 사용한 실시간 업데이트
-        st.markdown("""
+        # HTML 컴포넌트로 실시간 시계 표시
+        clock_html = f"""
+        <div style="display: flex; justify-content: space-between; margin: 10px 0; padding: 10px; background-color: #f0f2f6; border-radius: 10px;">
+            <div style="text-align: center; flex: 1;">
+                <div style="font-size: 14px; color: #666;">📅 게임 시간</div>
+                <div id="game_time" style="font-size: 20px; font-weight: bold;">{get_time_display(player)}</div>
+            </div>
+            <div style="text-align: center; flex: 1;">
+                <div style="font-size: 14px; color: #666;">⏰ 다음 달까지</div>
+                <div id="time_left" style="font-size: 20px; font-weight: bold;">{remaining}초</div>
+            </div>
+        </div>
+        
         <script>
-        function updateTime() {
-            setTimeout(function() {
-                window.location.reload();
-            }, 1000);
-        }
-        updateTime();
+        // 서버에서 받은 마지막 업데이트 시간 (초 단위 타임스탬프)
+        const lastUpdateTime = {last_update};
+        const secondsPerMonth = {seconds_per_month};
+        
+        // 현재 게임 시간 정보
+        let currentYear = {player['year']};
+        let currentMonth = {player['month']};
+        let currentWeek = {player['week']};
+        
+        function updateClock() {{
+            // 현재 시간 계산
+            const now = Date.now() / 1000; // 초 단위
+            const elapsed = now - lastUpdateTime;
+            
+            // 경과한 개월 수 계산
+            const monthsPassed = Math.floor(elapsed / secondsPerMonth);
+            
+            if (monthsPassed > 0) {{
+                // 새로고침 필요 (게임 시간이 변경됨)
+                location.reload();
+                return;
+            }}
+            
+            // 남은 초 계산
+            const remainingSeconds = Math.max(0, secondsPerMonth - (elapsed % secondsPerMonth));
+            
+            // 시간 표시 업데이트
+            document.getElementById('time_left').innerText = Math.floor(remainingSeconds) + '초';
+        }}
+        
+        // 1초마다 업데이트
+        setInterval(updateClock, 1000);
         </script>
-        """, unsafe_allow_html=True)
+        """
+        
+        st.markdown(clock_html, unsafe_allow_html=True)
+        
+        if st.session_state.events:
+            for event_type, message in st.session_state.events:
+                if "주차" in message or "월이 시작" in message:
+                    st.markdown(f"<div class='event-message'>{message}</div>", unsafe_allow_html=True)
+            # 이벤트 초기화
+            st.session_state.events = [e for e in st.session_state.events if not ("주차" in e[1] or "월이 시작" in e[1])]
         
         st.markdown(f"<div style='text-align: right; color: #666; margin-bottom: 10px;'>📊 거래 횟수: {st.session_state.stats['trade_count']}회</div>", unsafe_allow_html=True)
         
@@ -983,6 +1024,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
