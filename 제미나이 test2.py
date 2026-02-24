@@ -259,22 +259,11 @@ def update_game_time(player, settings, market_data, initial_stocks):
         
         events.append(("week", f"🌟 {player['year']}년 {player['month']}월 {player['week']}주차"))
         
-        season_effects = {
-            (3,4,5): ("🌸 봄: 인삼/가죽 수요 증가!", ['인삼', '소가죽', '염색가죽'], 1.2),
-            (6,7,8): ("☀️ 여름: 비단 수요 증가!", ['비단'], 1.3),
-            (9,10,11): ("🍂 가을: 쌀 수요 증가!", ['쌀'], 1.3),
-            (12,1,2): ("❄️ 겨울: 가죽갑옷 수요 급증!", ['가죽갑옷'], 1.5)
-        }
+        # ✅ season effect 관련 코드 완전히 삭제됨
         
-        for months, (msg, items, factor) in season_effects.items():
-            if player['month'] in months:
-                events.append(("season", msg))
-                break
-        
-        # ✅ volatility 값을 settings에서 가져와서 사용
-        volatility = settings.get('volatility', 5000)  # 기본값 5000
-        # volatility가 높을수록 변동성이 심해짐 (예: 5000이면 0.5% 확률, 10000이면 1% 확률)
-        event_probability = volatility / 1000000  # 5000 -> 0.005 (0.5%), 10000 -> 0.01 (1%)
+        # volatility -> inventoryResponsivePrice로 변경
+        inventoryResponsivePrice = settings.get('inventoryResponsivePrice', 5000)
+        event_probability = inventoryResponsivePrice / 1000000
         
         if random.random() < event_probability:
             cities = list(market_data.keys())
@@ -284,8 +273,7 @@ def update_game_time(player, settings, market_data, initial_stocks):
                 if items_in_city:
                     vol_item = random.choice(items_in_city)
                     vol_direction = random.choice(["상승", "하락"])
-                    # volatility가 높을수록 변동폭도 커짐
-                    vol_amount = random.randint(10, 30) + int(volatility / 1000)
+                    vol_amount = random.randint(10, 30) + int(inventoryResponsivePrice / 1000)
                     
                     if vol_direction == "상승":
                         market_data[random_city][vol_item]['price'] = int(market_data[random_city][vol_item]['price'] * (1 + vol_amount/100))
@@ -919,6 +907,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
