@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh  # 이 줄을 추가
 import gspread
 from google.oauth2.service_account import Credentials
 import json
@@ -220,30 +221,40 @@ def update_game_time(player, settings, market_data, initial_stocks):
         st.session_state.last_time_update = current_time
         return player, []
     
-    elapsed = current_time - st.session_state.last_time_update
-    # --- 시간 표시 및 자동 리프레시 로직 ---
-
-    # 1. 1초마다 페이지를 강제로 다시 그리게 함 (최상단에 이미 있다면 중복 작성 금지)
-    # 이 줄이 있어야 1초마다 아래의 'remaining' 계산이 다시 수행됩니다.
-    from streamlit_autorefresh import st_autorefresh
-    st_autorefresh(interval=1000, key="timer_refresh")
-    
-    # 2. 설정값 및 남은 시간 계산
+    # 설정값 (180초 = 1달)
     seconds_per_month = int(settings.get('seconds_per_month', 180))
-    seconds_per_week = seconds_per_month / 4  # 1주일 기준 (45초)
+    seconds_per_week = seconds_per_month / 4  # 45초
     
-    # 현재 시각에서 마지막 업데이트 시점을 빼서 이번 주가 몇 초 지났는지 확인
-    elapsed = time.time() - st.session_state.last_time_update
-    remaining = max(0, int(seconds_per_week - elapsed))
-    
-    # 3. 화면에 출력 (metric 혹은 write 사용)
-    # st.empty()를 사용하면 매초 숫자가 바뀌는 효과가 더 깔끔합니다.
-    placeholder = st.empty()
-    with placeholder.container():
-        st.metric("⏰ 다음 주까지", f"{remaining}초")
-        st.write(f"📅 현재 시간: {get_time_display(player)}")
+    # 마지막 업데이트 이후 흐른 시간
+    elapsed = current_time - st.session_state.last_time_update
+    weeks_passed = int(elapsed / seconds_per_week)
     
     events = []
+    
+    if weeks_passed > 0:
+        # 시간 업데이트 로직
+        for _ in range(weeks_passed):
+            player['week'] += 1
+            if player['week'] > 4:
+                player['week'] = 1
+                player['month'] += 1
+                if player['month'] > 12:
+                    player['month'] = 1
+                    player['year'] += 1
+        
+        # 기준점 갱신
+        st.session_state.last_time_update += weeks_passed * seconds_per_week
+        events.append(("week", f"🌟 {player['year']}년 {player['month']}월 {player['week']}주차 소식이 도착했습니다."))
+        
+        # 재고 초기화 체크 (180초 주기가 완료될 때)
+        if player['week'] == 1:
+            for v_name in market_data:
+                if v_name in initial_stocks:
+                    for item_name in market_data[v_name]:
+                        market_data[v_name][item_name]['stock'] = initial_stocks[v_name][item_name]
+            events.append(("reset", "🔄 새 달을 맞아 재고가 초기화되었습니다."))
+
+    return player, events
     
     if months_passed > 0:
         old_month = player['month']
@@ -544,85 +555,97 @@ if doc:
         market_data = st.session_state.market_data
         initial_stocks = st.session_state.initial_stocks
         
-        # 메인 실행 부분
-        current_time = time.time()
-        if current_time - st.session_state.last_update > 1:
-            player, events = update_game_time(player, settings, market_data, initial_stocks)
-            if events:
-                st.session_state.events = events
-            st.session_state.last_update = current_time
+# --- 7. 메인 실행 ---
+doc = connect_gsheet()
+init_session_state()
+
+# ⭐ 1. 자동 새로고침 설정 (1초마다 코드를 다시 실행시켜 시간을 깎음)
+# 이 코드가 맨 위에 있어야 에러 없이 1초마다 숫자가 바뀝니다.
+from streamlit_autorefresh import st_autorefresh
+st_autorefresh(interval=1000, key="gametimer_refresh")
+
+if doc:
+    if not st.session_state.game_started:
+        st.title("🏯 조선거상 미니")
+        st.markdown("---")
         
-        update_prices(settings, items_info, market_data, initial_stocks)  # <-- 여기서 호출됨
+        settings, items_info, merc_data, villages, initial_stocks, slots = load_game_data()        
         
+        if slots:
+            st.subheader("📋 세이브 슬롯 선택")
+            cols = st.columns(3)
+            for i, s in enumerate(slots[:3]):
+                with cols[i]:
+                    st.info(f"**슬롯 {s['slot']}**\n\n📍 {s['pos']}\n💰 {s['money']:,}냥\n📅 {s['year']}년 {s['month']}월")
+            
+            slot_choice = st.selectbox("슬롯 번호", options=[1, 2, 3], index=0)
+            
+            if st.button("🎮 게임 시작", use_container_width=True):
+                selected = next((s for s in slots if s['slot'] == slot_choice), None)
+                if selected:
+                    st.session_state.player = selected
+                    st.session_state.settings = settings
+                    st.session_state.items_info = items_info
+                    st.session_state.merc_data = merc_data
+                    st.session_state.villages = villages
+                    st.session_state.initial_stocks = initial_stocks
+                    st.session_state.last_time_update = time.time()
+                    st.session_state.last_update = time.time() # 추가
+                    st.session_state.trade_logs = {}
+                    
+                    market_data = {}
+                    for v_name, v_data in villages.items():
+                        if v_name != "용병 고용소":
+                            market_data[v_name] = {}
+                            for item_name, stock in v_data['items'].items():
+                                market_data[v_name][item_name] = {'stock': stock, 'price': items_info[item_name]['base']}
+                    
+                    update_prices(settings, items_info, market_data, initial_stocks)
+                    st.session_state.market_data = market_data
+                    st.session_state.game_started = True
+                    st.rerun()
+    
+    else:
+        # 🎮 게임 화면 시작
+        player = st.session_state.player
+        settings = st.session_state.settings
+        items_info = st.session_state.items_info
+        merc_data = st.session_state.merc_data
+        market_data = st.session_state.market_data
+        initial_stocks = st.session_state.initial_stocks
+        
+        # ⭐ 2. 시간 시스템 업데이트 (1주일마다 알림 생성)
+        player, events = update_game_time(player, settings, market_data, initial_stocks)
+        
+        # 1주일마다 뜨는 메시지를 토스트 알림으로 표시
+        if events:
+            for etype, emsg in events:
+                if etype == "week":
+                    st.toast(emsg, icon="📅")
+                else:
+                    st.session_state.events.append((etype, emsg))
+
+        update_prices(settings, items_info, market_data, initial_stocks)
         cw, tw = get_weight(player, items_info, merc_data)
         
-        if st.session_state.events:
-            for event_type, message in st.session_state.events:
-                st.markdown(f"<div class='event-message'>{message}</div>", unsafe_allow_html=True)
-            st.session_state.events = []
-        
-    # 상단 정보 부분 (기존 col1~col4 + metric + JS 부분을 이걸로 통째 교체)
-    
+        # 상단 정보 표시
         st.title(f"🏯 {player['pos']}")
         
         col1, col2, col3, col4 = st.columns(4)
+        col1.metric("💰 소지금", f"{player['money']:,}냥")
+        col2.metric("⚖️ 무게", f"{cw}/{tw}근")
+        col3.metric("📅 시간", get_time_display(player))
         
-        money_placeholder = col1.empty()
-        money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
-        
-        weight_placeholder = col2.empty()
-        weight_placeholder.metric("⚖️ 무게", f"{cw}/{tw}근")
-        
-        time_placeholder = col3.empty()
-        time_placeholder.metric("📅 시간", get_time_display(player))
-        
-        # 남은 시간 계산
-            # 1. 설정값 가져오기 (기본 180초)
+        # ⭐ 3. 실시간 카운트다운 계산
         seconds_per_month = int(settings.get('seconds_per_month', 180))
-        seconds_per_week = seconds_per_month / 4  # 1주일은 45초
+        seconds_per_week = seconds_per_month / 4
+        elapsed_since_update = time.time() - st.session_state.last_time_update
+        remaining = max(0, int(seconds_per_week - elapsed_since_update))
         
-            # 2. 마지막 업데이트 이후 흐른 시간 계산
-        elapsed_since_last_update = time.time() - st.session_state.last_time_update
-        
-            # 3. 이번 주차가 끝나기까지 남은 시간 계산
-        # elapsed_since_last_update가 45초를 넘어가면 update_game_time에서 처리될 것이므로
-        # 여기서는 45초에서 뺀 값을 보여줍니다.
-        remaining_in_week = max(0, int(seconds_per_week - elapsed_since_last_update))
-        
-            # 4. UI 출력
-        time_left_placeholder = col4.empty()
-        time_left_placeholder.metric("⏰ 다음 주까지", f"{remaining_in_week}초")
-        
-        # 한 번에 정의되는 단일 스크립트 (변수 정의 → 함수 → 실행 순서 보장)
-        st.markdown(f"""
-        <script>
-        (function() {{
-            const startTime = {int(st.session_state.last_time_update)};
-            const duration = {seconds_per_month};
-        
-            function updateCountdown() {{
-                const now = Math.floor(Date.now() / 1000);
-                const elapsed = now - startTime;
-                let left = duration - (elapsed % duration);
-                if (left <= 0) left = duration;
-        
-                // metric 값 업데이트 시도 (Streamlit metric의 마지막 값 잡기)
-                const countdownElem = document.querySelector('div[data-testid="stMetricValue"]');
-                if (countdownElem) {{
-                    countdownElem.innerText = Math.floor(left) + '초';
-                }}
-        
-                // 달 바뀔 때만 새로고침
-                if (elapsed >= duration - 3) {{
-                    setTimeout(() => {{ location.reload(); }}, 1200);
-                }}
-            }}
-        
-            setInterval(updateCountdown, 1000);
-            updateCountdown();
-        }})();
-        </script>
-        """, unsafe_allow_html=True)
+        # 44초에서 멈추지 않고 1초마다 깎이게 함
+        col4.metric("⏰ 다음 주까지", f"{remaining}초")
+
+        # 기존 탭 메뉴 코드 생략 (여기에 기존 탭 메뉴 코드들이 쭉 이어지면 됩니다)
                 
         # 현재 탭 상태 초기화 - 이동 후 탭 전환을 위해 필요
         if 'current_tab' not in st.session_state:
@@ -1030,6 +1053,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
