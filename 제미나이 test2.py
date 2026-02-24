@@ -294,9 +294,13 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
     if initial_stocks is None:
         initial_stocks = st.session_state.get('initial_stocks', {})
     
-    # 최소/최대 가격 비율만 유지
     min_price_rate = settings.get('min_price_rate', 0.4)
     max_price_rate = settings.get('max_price_rate', 3.0)
+    
+    # ✅ inventoryResponsivePrice 값 가져오기 (민감도)
+    responsive_price = settings.get('inventoryResponsivePrice', 5000)
+    # 민감도 계수로 변환 (5000이 기본, 높을수록 변동폭 커짐)
+    sensitivity = responsive_price / 1000  # 5000 -> 5.0, 10000 -> 10.0
     
     for v_name, v_data in market_data.items():
         if v_name == "용병 고용소":
@@ -316,9 +320,24 @@ def update_prices(settings, items_info, market_data, initial_stocks=None):
                 else:
                     stock_ratio = stock / initial_stock
                     
-                    # ✅ 기존 ratio/factor 관련 코드를 제거하고 단순화
-                    # 재고 비율에 따라 기본 가격 사용
-                    i_info['price'] = int(base)
+                    # ✅ inventoryResponsivePrice를 적용한 가격 계산
+                    # 재고가 적을수록 가격 상승, 재고가 많을수록 가격 하락
+                    if stock_ratio < 0.3:  # 재고 30% 미만
+                        price_factor = 1.0 + (sensitivity * 0.3)  # 예: sensitivity 5.0 -> 2.5 (250%)
+                    elif stock_ratio < 0.5:  # 재고 50% 미만
+                        price_factor = 1.0 + (sensitivity * 0.2)  # 예: sensitivity 5.0 -> 2.0 (200%)
+                    elif stock_ratio < 0.7:  # 재고 70% 미만
+                        price_factor = 1.0 + (sensitivity * 0.1)  # 예: sensitivity 5.0 -> 1.5 (150%)
+                    elif stock_ratio < 1.0:  # 재고 100% 미만
+                        price_factor = 1.0 + (sensitivity * 0.04)  # 예: sensitivity 5.0 -> 1.2 (120%)
+                    elif stock_ratio < 1.3:  # 재고 130% 미만
+                        price_factor = 1.0  # 100%
+                    elif stock_ratio < 1.6:  # 재고 160% 미만
+                        price_factor = 1.0 - (sensitivity * 0.04)  # 예: sensitivity 5.0 -> 0.8 (80%)
+                    else:  # 재고 160% 이상
+                        price_factor = 1.0 - (sensitivity * 0.08)  # 예: sensitivity 5.0 -> 0.6 (60%)
+                    
+                    i_info['price'] = int(base * price_factor)
                     
                     # 최소/최대 가격 제한 적용
                     min_price = int(base * min_price_rate)
@@ -907,6 +926,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
