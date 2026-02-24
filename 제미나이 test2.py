@@ -542,7 +542,7 @@ if doc:
                 st.markdown(f"<div class='event-message'>{message}</div>", unsafe_allow_html=True)
             st.session_state.events = []
         
-       # 상단 정보
+       # 상단 정보 부분
         st.title(f"🏯 {player['pos']}")
         
         col1, col2, col3, col4 = st.columns(4)
@@ -555,12 +555,23 @@ if doc:
         time_placeholder = col3.empty()
         time_placeholder.metric("📅 시간", get_time_display(player))
         
-        # ✅ settings에서 seconds_per_month 가져와서 남은 시간 계산
         seconds_per_month = int(settings.get('seconds_per_month', 180))
         elapsed = time.time() - st.session_state.last_time_update
         remaining = max(0, seconds_per_month - int(elapsed))
         time_left_placeholder = col4.empty()
         time_left_placeholder.metric("⏰ 다음 달까지", f"{remaining}초")
+        
+        # JavaScript를 사용한 실시간 업데이트
+        st.markdown("""
+        <script>
+        function updateTime() {
+            setTimeout(function() {
+                window.location.reload();
+            }, 1000);
+        }
+        updateTime();
+        </script>
+        """, unsafe_allow_html=True)
         
         st.markdown(f"<div style='text-align: right; color: #666; margin-bottom: 10px;'>📊 거래 횟수: {st.session_state.stats['trade_count']}회</div>", unsafe_allow_html=True)
         
@@ -972,6 +983,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
