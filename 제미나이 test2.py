@@ -386,93 +386,85 @@ def calculate_max_purchase(player, items_info, market_data, pos, item_name, targ
 def process_buy(player, items_info, market_data, pos, item_name, qty, progress_placeholder, log_key):
     total_bought = 0
     total_spent = 0
+    batch_size = 100 # 연속 체결 단위
     
-    # 로그 초기화
     st.session_state.trade_logs[log_key] = []
     
     while total_bought < qty:
-        # 현재 시점의 가격과 무게 정보 갱신
+        # 1. 매 루프마다 가격 업데이트 (재고 감소 반영)
         update_prices(st.session_state.settings, items_info, market_data, st.session_state.initial_stocks)
         target = market_data[pos][item_name]
         cw, tw = get_weight(player, items_info, st.session_state.merc_data)
         
-        # 현재 가격 기준으로 살 수 있는 최대치 계산
+        # 2. 현재 시점 최대 구매 가능 계산 (돈, 무게, 재고)
         can_pay = player['money'] // target['price'] if target['price'] > 0 else 0
         can_load = (tw - cw) // items_info[item_name]['w'] if items_info[item_name]['w'] > 0 else 999999
         
-        # ⭐ 배치 크기를 늘려 한 번에 더 많이 처리 (끊김 감소)
-        # 남은 수량, 마을 재고, 돈, 무게 중 가장 작은 값이 이번 턴의 체결량
-        batch = min(qty - total_bought, target['stock'], can_pay, can_load)
+        # 3. 이번 턴에 체결할 양 (남은양, 100개단위, 재고, 돈, 무게 중 최소값)
+        current_batch = min(batch_size, qty - total_bought, target['stock'], can_pay, can_load)
         
-        if batch <= 0:
-            break
+        if current_batch <= 0:
+            break # 더 이상 살 수 없으면 중단
             
-        # 실제 데이터 반영
-        cost = batch * target['price']
+        # 4. 실제 데이터 반영 (돈 마이너스 방지)
+        cost = current_batch * target['price']
         player['money'] -= cost
         total_spent += cost
-        player['inv'][item_name] = player['inv'].get(item_name, 0) + batch
-        target['stock'] -= batch
-        total_bought += batch
+        player['inv'][item_name] = player['inv'].get(item_name, 0) + current_batch
+        target['stock'] -= current_batch
+        total_bought += current_batch
         
-        # 로그 기록
+        # 5. 실시간 로그 표시
         log_msg = f"➤ {total_bought}/{qty} 구매 중... (체결가: {target['price']}냥)"
         st.session_state.trade_logs[log_key].append(log_msg)
         
         with progress_placeholder.container():
-            # 마지막 5줄만 표시하여 속도 향상
             for log in st.session_state.trade_logs[log_key][-5:]:
                 st.markdown(f"<div class='trade-line'>{log}</div>", unsafe_allow_html=True)
         
-        # 0.01초 대기 (시각적 효과)
-        time.sleep(0.01)
+        time.sleep(0.05) # 체결되는 느낌을 위한 짧은 대기
 
-    # ⭐ 거래 완료 후 최종 성공 로그를 세션에 저장
+    # 최종 결과 저장
     if total_bought > 0:
-        st.session_state.last_trade_result = f"✅ {item_name} 총 {total_bought}개 구매 완료! (소모: {total_spent:,}냥)"
+        st.session_state.last_trade_result = f"✅ {item_name} 총 {total_bought}개 구매 완료! (총 {total_spent:,}냥)"
     
     return total_bought, total_spent
 
 def process_sell(player, items_info, market_data, pos, item_name, qty, progress_placeholder, log_key):
     total_sold = 0
     total_earned = 0
-    batch_prices = []
+    batch_size = 100
     
-    if log_key not in st.session_state.trade_logs:
-        st.session_state.trade_logs[log_key] = []
+    st.session_state.trade_logs[log_key] = []
     
     while total_sold < qty:
         update_prices(st.session_state.settings, items_info, market_data, st.session_state.initial_stocks)
         current_price = market_data[pos][item_name]['price']
         
-        batch = min(100, qty - total_sold, player['inv'].get(item_name, 0))
+        # 내가 가진 개수와 100개 단위 중 작은 값
+        current_batch = min(batch_size, qty - total_sold, player['inv'].get(item_name, 0))
         
-        if batch <= 0:
+        if current_batch <= 0:
             break
+            
+        # 데이터 반영
+        player['money'] += current_batch * current_price
+        player['inv'][item_name] -= current_batch
+        market_data[pos][item_name]['stock'] += current_batch
+        total_sold += current_batch
+        total_earned += current_batch * current_price
         
-        for _ in range(batch):
-            player['money'] += current_price
-            player['inv'][item_name] -= 1
-            market_data[pos][item_name]['stock'] += 1
-            total_sold += 1
-            total_earned += current_price
-            batch_prices.append(current_price)
-        
-        avg_price = sum(batch_prices) // len(batch_prices)
-        log_msg = f"➤ {total_sold}/{qty} 판매 중... (체결가: {current_price}냥 | 평균가: {avg_price}냥)"
+        log_msg = f"➤ {total_sold}/{qty} 판매 중... (체결가: {current_price}냥)"
         st.session_state.trade_logs[log_key].append(log_msg)
         
         with progress_placeholder.container():
-            for log in st.session_state.trade_logs[log_key][-10:]:
+            for log in st.session_state.trade_logs[log_key][-5:]:
                 st.markdown(f"<div class='trade-line'>{log}</div>", unsafe_allow_html=True)
         
         time.sleep(0.05)
-    
-    # 🔥 [수정 포인트] 거래 완료 후 메시지 저장
+
     if total_sold > 0:
-        final_msg = f"✅ {item_name} 총 {total_sold}개 구매 완료! (소모: {total_earned:,}냥)"
-        st.session_state.last_trade_result = final_msg # 세션에 저장하여 리프레시 후에도 유지
-        st.toast(final_msg) # 우측 하단 팝업 알림
+        st.session_state.last_trade_result = f"✅ {item_name} 총 {total_sold}개 판매 완료! (총 {total_earned:,}냥)"
         
     return total_sold, total_earned
 
@@ -650,7 +642,13 @@ if doc:
                 del st.session_state.event_display
         
         # --- 상단 UI 표시 ---
+        # 상단 마을 이름 표시 아래에 추가
         st.title(f"🏯 {player['pos']}")
+        
+        if 'last_trade_result' in st.session_state:
+            st.success(st.session_state.last_trade_result)
+            # 선택사항: 사용자가 내용을 확인했으면 사라지게 하고 싶을 때
+            # if st.button("알림 지우기"): del st.session_state.last_trade_result
 
         top_col1, top_col2 = st.columns(2)
         top_col1.metric("💰 소지금", f"{player['money']:,}냥")
@@ -790,102 +788,66 @@ if doc:
                                         st.markdown("</div>", unsafe_allow_html=True)
                                     break
                             
+                            # --- 💰 매수 버튼 로직 ---
                             if col_b.button("💰 매수", key=f"buy_{item_name}", use_container_width=True):
                                 try:
                                     qty_int = int(qty)
                                     if qty_int > 0:
-                                        actual_qty = min(qty_int, max_buy)
-                                        if actual_qty > 0:
+                                        # 1. 100개씩 끊어서 살 수 있는 로직(process_buy) 호출
+                                        # 실제 최대 가능 수량은 함수 내부에서 다시 정밀하게 계산하므로 qty_int를 그대로 넘깁니다.
+                                        log_key = f"{player['pos']}_{item_name}_{time.time()}"
+                                        
+                                        bought, spent = process_buy(
+                                            player, items_info, market_data,
+                                            player['pos'], item_name, qty_int, progress_ph, log_key
+                                        )
+                                        
+                                        if bought > 0:
+                                            # 통계 업데이트
+                                            st.session_state.stats['total_bought'] += bought
+                                            st.session_state.stats['total_spent'] += spent
+                                            st.session_state.stats['trade_count'] += 1
+                                            
+                                            # ⭐ 핵심: 결과 메시지를 전역 세션에 저장 (상단 UI에서 출력하기 위함)
+                                            avg_price = spent // bought
+                                            st.session_state.last_trade_result = f"✅ {item_name} 총 {bought}개 매수 완료! (총 {spent:,}냥 | 평균가: {avg_price}냥)"
+                                            
+                                            # 입력을 '1'로 초기화 (선택 사항)
                                             st.session_state.last_qty[f"{player['pos']}_{item_name}"] = "1"
                                             
-                                            log_key = f"{player['pos']}_{item_name}_{time.time()}"
-                                            
-                                            bought, spent = process_buy(
-                                                player, items_info, market_data,
-                                                player['pos'], item_name, actual_qty, progress_ph, log_key
-                                            )
-                                            
-                                            if bought > 0:
-                                                st.session_state.stats['total_bought'] += bought
-                                                st.session_state.stats['total_spent'] += spent
-                                                st.session_state.stats['trade_count'] += 1
-                                                
-                                                money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
-                                                cw, tw = get_weight(player, items_info, merc_data)
-                                                weight_placeholder.metric("⚖️ 무게", f"{cw}/{tw}근")
-                                                
-                                                price_ph.markdown(f"<span class='{price_class}'>{d['price']:,}냥</span>", unsafe_allow_html=True)
-                                                stock_ph.write(f"📦 {d['stock']}개")
-                                                
-                                                new_max_buy = calculate_max_purchase(
-                                                    player, items_info, market_data, 
-                                                    player['pos'], item_name, d['price']
-                                                )
-                                                max_ph.write(f"⚡ {new_max_buy}개")
-                                                
-                                                avg_price = spent // bought
-                                                # 초록색 결과 로그를 세션에 저장
-                                                result_key = f"result_{player['pos']}_{item_name}"
-                                                st.session_state[result_key] = f"✅ 총 {bought}개 매수 완료! (총 {spent:,}냥 | 평균가: {avg_price}냥)"
-                                                
-                                                # 저장된 결과 로그 표시
-                                                if result_key in st.session_state:
-                                                    st.markdown(f"<div class='trade-complete'>{st.session_state[result_key]}</div>", unsafe_allow_html=True)
-                                            else:
-                                                st.error("❌ 구매 실패")
+                                            # 화면 전체를 갱신하여 상단 소지금/무게/로그를 한꺼번에 업데이트
+                                            st.rerun()
                                         else:
-                                            st.error("❌ 구매 가능한 수량이 없습니다")
+                                            st.error("❌ 구매 가능한 수량이 없거나 돈/무게가 부족합니다.")
                                     else:
                                         st.error("❌ 0보다 큰 수량을 입력하세요")
                                 except ValueError:
                                     st.error("❌ 올바른 숫자를 입력하세요")
-                            
+
+                            # --- 📦 매도 버튼 로직 ---
                             if col_c.button("📦 매도", key=f"sell_{item_name}", use_container_width=True):
                                 try:
                                     qty_int = int(qty)
                                     if qty_int > 0:
-                                        max_sell = player['inv'].get(item_name, 0)
-                                        actual_qty = min(qty_int, max_sell)
-                                        if actual_qty > 0:
+                                        log_key = f"{player['pos']}_{item_name}_{time.time()}"
+                                        
+                                        sold, earned = process_sell(
+                                            player, items_info, market_data,
+                                            player['pos'], item_name, qty_int, progress_ph, log_key
+                                        )
+                                        
+                                        if sold > 0:
+                                            st.session_state.stats['total_sold'] += sold
+                                            st.session_state.stats['total_earned'] += earned
+                                            st.session_state.stats['trade_count'] += 1
+                                            
+                                            avg_price = earned // sold
+                                            st.session_state.last_trade_result = f"✅ {item_name} 총 {sold}개 매도 완료! (총 {earned:,}냥 | 평균가: {avg_price}냥)"
+                                            
                                             st.session_state.last_qty[f"{player['pos']}_{item_name}"] = "1"
-                                            
-                                            log_key = f"{player['pos']}_{item_name}_{time.time()}"
-                                            
-                                            sold, earned = process_sell(
-                                                player, items_info, market_data,
-                                                player['pos'], item_name, actual_qty, progress_ph, log_key
-                                            )
-                                            
-                                            if sold > 0:
-                                                st.session_state.stats['total_sold'] += sold
-                                                st.session_state.stats['total_earned'] += earned
-                                                st.session_state.stats['trade_count'] += 1
-                                                
-                                                money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
-                                                cw, tw = get_weight(player, items_info, merc_data)
-                                                weight_placeholder.metric("⚖️ 무게", f"{cw}/{tw}근")
-                                                
-                                                price_ph.markdown(f"<span class='{price_class}'>{d['price']:,}냥</span>", unsafe_allow_html=True)
-                                                stock_ph.write(f"📦 {d['stock']}개")
-                                                
-                                                new_max_buy = calculate_max_purchase(
-                                                    player, items_info, market_data, 
-                                                    player['pos'], item_name, d['price']
-                                                )
-                                                max_ph.write(f"⚡ {new_max_buy}개")
-                                                
-                                                avg_price = earned // sold
-                                                # 초록색 결과 로그를 세션에 저장
-                                                result_key = f"result_{player['pos']}_{item_name}"
-                                                st.session_state[result_key] = f"✅ 총 {sold}개 매도 완료! (총 {earned:,}냥 | 평균가: {avg_price}냥)"
-                                                
-                                                # 저장된 결과 로그 표시
-                                                if result_key in st.session_state:
-                                                    st.markdown(f"<div class='trade-complete'>{st.session_state[result_key]}</div>", unsafe_allow_html=True)
-                                            else:
-                                                st.error("❌ 판매 실패")
+                                            st.rerun()
                                         else:
-                                            st.error("❌ 판매 가능한 수량이 없습니다")
+                                            st.error("❌ 판매할 아이템이 없습니다.")
                                     else:
                                         st.error("❌ 0보다 큰 수량을 입력하세요")
                                 except ValueError:
@@ -1083,6 +1045,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
