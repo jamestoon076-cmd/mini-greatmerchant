@@ -94,7 +94,8 @@ def load_game_data():
                 name = str(r['item_name']).strip()
                 items_info[name] = {
                     'base': int(r['base_price']),
-                    'w': int(r['weight'])
+                    'w': int(r['weight']),
+                    'image': r.get('image_url', '')  # 이미지 URL 추가
                 }
         
         # 용병 정보 로드
@@ -764,7 +765,21 @@ if doc:
                             trend = "■"
                         
                         with st.container():
-                            st.markdown(f"**{item_name}** {trend}")
+                            # 이미지와 아이템명을 한 줄에 표시
+                            col_img, col_name = st.columns([1, 8])
+                            
+                            # 이미지 URL이 있으면 표시, 없으면 기본 아이콘
+                            img_url = items_info[item_name].get('image', '')
+                            if img_url and img_url.strip():  # URL이 비어있지 않으면
+                                try:
+                                    col_img.image(img_url, width=30)
+                                except Exception as e:
+                                    col_img.markdown("📦")  # 이미지 로드 실패시 기본 아이콘
+                            else:
+                                col_img.markdown("📦")  # 이미지 URL이 없을 때 기본 아이콘
+                            
+                            # 아이템명과 가격 동향
+                            col_name.markdown(f"**{item_name}** {trend}")
                             
                             # 저장된 결과 로그 표시
                             result_key = f"result_{player['pos']}_{item_name}"
@@ -1050,6 +1065,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
