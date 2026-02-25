@@ -911,17 +911,13 @@ if doc:
                             # 이미지와 아이템명을 한 줄에 표시
                             col_img, col_name = st.columns([1, 5])
 
-                            # 이미지 URL 가져오기 및 변환
+                            # 이미지 URL 가져오기
                             img_url = items_info[item_name].get("image", "")
-
-                            # 구글 드라이브 URL 변환
-                            if (
-                                img_url
-                                and "drive.google.com" in img_url
-                                and "/file/d/" in img_url
-                            ):
+                            
+                            # 구글 드라이브 링크면 파일 ID 추출해서 uc 형식으로 변환
+                            if img_url and "id=" in img_url:
                                 try:
-                                    file_id = img_url.split("/file/d/")[1].split("/")[0]
+                                    file_id = img_url.split("id=")[1].split("&")[0]
                                     img_url = f"https://drive.google.com/uc?export=view&id={file_id}"
                                 except:
                                     pass
@@ -1295,3 +1291,4 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
