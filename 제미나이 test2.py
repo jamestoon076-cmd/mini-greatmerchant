@@ -696,8 +696,8 @@ if doc:
         # 📑 7. 탭 메뉴 구성
         if 'tab_key' not in st.session_state:
             st.session_state.tab_key = 0
-            
-        # key를 사용하여 도시 이동 시 탭을 강제 리셋함
+
+        # 반드시 tab_key 초기화 코드 바로 아래에 위치해야 합니다.
         tab1, tab2, tab3, tab4, tab5 = st.tabs(
             ["🛒 저잣거리", "📦 인벤토리", "⚔️ 용병", "📊 통계", "⚙️ 이동"],
             key=f"tabs_{st.session_state.tab_key}"
@@ -1058,6 +1058,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
