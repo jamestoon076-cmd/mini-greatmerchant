@@ -221,13 +221,9 @@ def update_game_time(player, settings, market_data, initial_stocks):
         st.session_state.last_time_update = current_time
         return player, []
     
-    # DB에서 설정값 가져오기 (180초 = 1달)
     seconds_per_month = int(settings.get('seconds_per_month', 180))
     seconds_per_week = seconds_per_month / 4
-    
     elapsed = current_time - st.session_state.last_time_update
-    
-    # ✅ 정수 나눗셈(//)으로 몇 주가 지났는지 정확히 계산
     weeks_passed = int(elapsed // seconds_per_week)
     
     events = []
@@ -238,14 +234,23 @@ def update_game_time(player, settings, market_data, initial_stocks):
             if player['week'] > 4:
                 player['week'] = 1
                 player['month'] += 1
+                
+                # ⭐ [핵심 추가] 월이 바뀌면 재고를 초기화합니다.
+                for v_name, v_items in initial_stocks.items():
+                    if v_name in market_data:
+                        for item_name, initial_stock_val in v_items.items():
+                            if item_name in market_data[v_name]:
+                                market_data[v_name][item_name]['stock'] = initial_stock_val
+                
+                events.append(("month", "📅 새 달이 밝아 모든 마을의 재고가 초기화되었습니다!"))
+                
                 if player['month'] > 12:
                     player['month'] = 1
                     player['year'] += 1
         
-        # 🔥 중요: 기준점을 현재시간이 아닌 '지나간 주차만큼'만 정확히 더해줌
         st.session_state.last_time_update += weeks_passed * seconds_per_week
         
-        # 5초간 띄울 메시지 데이터 생성
+        # 주차 알림 저장
         st.session_state.event_display = {
             "message": f"🌟 {player['year']}년 {player['month']}월 {player['week']}주차 소식이 도착했습니다.",
             "time": time.time()
@@ -1087,6 +1092,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
