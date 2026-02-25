@@ -1016,26 +1016,23 @@ if doc:
                         move_dict[option_text] = (t, cost)
 
                 # --- 마을 이동 버튼 로직 부분 ---
-                selected_move = st.selectbox("목적지 선택", list(move_options.keys()), key="move_selectbox")
-                
-                if st.button("🚀 이동", use_container_width=True):
-                    dest, cost = move_options[selected_move]
-                    if player['money'] >= cost:
-                        player['money'] -= cost
-                        player['pos'] = dest
-                        
-                        # 2. 거래 알림 삭제
-                        if 'last_trade_result' in st.session_state:
-                            del st.session_state['last_trade_result']
-                        
-                        # 3. ⭐ 탭을 저잣거리(첫 번째)로 초기화하는 핵심 코드
-                        # st.tabs에 key=f"tabs_{st.session_state.tab_key}"가 걸려 있어야 작동합니다.
-                        st.session_state.tab_key += 1 
-                        
-                        st.success(f"✅ {dest}(으)로 이동했습니다!")
-                        st.rerun()
-                    else:
-                        st.error("❌ 잔액이 부족합니다.")
+                if move_options:
+                    selected_text = st.selectbox("목적지 선택", move_options, key="move_selectbox")
+                    dest, cost = move_dict[selected_text]
+                    
+                    if st.button("🚀 이동", use_container_width=True):
+                        if player['money'] >= cost:
+                            player['money'] -= cost
+                            player['pos'] = dest
+                            
+                            # 거래 로그 삭제 (선택사항)
+                            if 'last_trade_result' in st.session_state:
+                                del st.session_state['last_trade_result']
+                            
+                            st.success(f"✅ {dest}(으)로 이동했습니다!")
+                            st.rerun()
+                        else:
+                            st.error("❌ 잔액이 부족합니다.")
                     
                 st.divider()
             
@@ -1053,6 +1050,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
