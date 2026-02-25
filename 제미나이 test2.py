@@ -417,6 +417,12 @@ def process_buy(player, items_info, market_data, pos, item_name, qty, progress_p
         
         time.sleep(0.05)
     
+    # 🔥 [수정 포인트] 거래 완료 후 메시지 저장
+    if total_bought > 0:
+        final_msg = f"✅ {item_name} 총 {total_bought}개 구매 완료! (소모: {total_spent:,}냥)"
+        st.session_state.last_trade_result = final_msg # 세션에 저장하여 리프레시 후에도 유지
+        st.toast(final_msg) # 우측 하단 팝업 알림
+        
     return total_bought, total_spent
 
 def process_sell(player, items_info, market_data, pos, item_name, qty, progress_placeholder, log_key):
@@ -454,6 +460,12 @@ def process_sell(player, items_info, market_data, pos, item_name, qty, progress_
         
         time.sleep(0.05)
     
+    # 🔥 [수정 포인트] 거래 완료 후 메시지 저장
+    if total_sold > 0:
+        final_msg = f"✅ {item_name} 총 {total_sold}개 구매 완료! (소모: {total_earned:,}냥)"
+        st.session_state.last_trade_result = final_msg # 세션에 저장하여 리프레시 후에도 유지
+        st.toast(final_msg) # 우측 하단 팝업 알림
+        
     return total_sold, total_earned
 
 def save_player_data(doc, player, stats, device_id):
@@ -1075,6 +1087,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
