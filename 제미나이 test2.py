@@ -595,11 +595,39 @@ if doc:
 
         sync_time_ui()
 
-        # ⭐ 탭 메뉴 (동적 키 사용)
+       # ⭐ 탭 메뉴 (key 파라미터 제거)
         tab1, tab2, tab3, tab4, tab5 = st.tabs(
-            ["🛒 저잣거리", "📦 인벤토리", "⚔️ 용병", "📊 통계", "⚙️ 이동"],
-            key=f"tabs_{st.session_state.tab_key}"
+            ["🛒 저잣거리", "📦 인벤토리", "⚔️ 용병", "📊 통계", "⚙️ 이동"]
         )
+        
+        # ⭐ 탭 인덱스 관리를 위한 세션 상태 추가
+        if 'current_tab' not in st.session_state:
+          st.session_state.current_tab = 0
+        
+        # ⭐ 탭 변경 감지
+        if st.session_state.get('tab_key', 0) > 0:
+            st.session_state.current_tab = 0  # 저잣거리 탭으로 강제 설정
+            st.session_state.tab_key = 0  # 초기화
+        
+        # 탭 인덱스 적용 (선택된 탭 표시)
+        tab_icons = ["🛒 저잣거리", "📦 인벤토리", "⚔️ 용병", "📊 통계", "⚙️ 이동"]
+        selected_tab = st.radio(
+            "탭 선택",
+            options=tab_icons,
+            index=st.session_state.current_tab,
+            label_visibility="collapsed",
+            horizontal=True,
+            key="tab_selector"
+        )
+
+        # 선택된 탭에 따라 내용 표시
+        if selected_tab == "🛒 저잣거리":
+            # 저잣거리 내용...
+            pass
+        elif selected_tab == "📦 인벤토리":
+            # 인벤토리 내용...
+            pass
+        # ... 나머지 탭들
         
         with tab1:
             if player['pos'] == "용병 고용소":
