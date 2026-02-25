@@ -386,48 +386,51 @@ def calculate_max_purchase(player, items_info, market_data, pos, item_name, targ
 def process_buy(player, items_info, market_data, pos, item_name, qty, progress_placeholder, log_key):
     total_bought = 0
     total_spent = 0
-    batch_prices = []
     
-    if log_key not in st.session_state.trade_logs:
-        st.session_state.trade_logs[log_key] = []
+    # 로그 초기화
+    st.session_state.trade_logs[log_key] = []
     
     while total_bought < qty:
+        # 현재 시점의 가격과 무게 정보 갱신
         update_prices(st.session_state.settings, items_info, market_data, st.session_state.initial_stocks)
         target = market_data[pos][item_name]
         cw, tw = get_weight(player, items_info, st.session_state.merc_data)
         
+        # 현재 가격 기준으로 살 수 있는 최대치 계산
         can_pay = player['money'] // target['price'] if target['price'] > 0 else 0
         can_load = (tw - cw) // items_info[item_name]['w'] if items_info[item_name]['w'] > 0 else 999999
         
-        batch = min(100, qty - total_bought, target['stock'], can_pay, can_load)
+        # ⭐ 배치 크기를 늘려 한 번에 더 많이 처리 (끊김 감소)
+        # 남은 수량, 마을 재고, 돈, 무게 중 가장 작은 값이 이번 턴의 체결량
+        batch = min(qty - total_bought, target['stock'], can_pay, can_load)
         
         if batch <= 0:
             break
+            
+        # 실제 데이터 반영
+        cost = batch * target['price']
+        player['money'] -= cost
+        total_spent += cost
+        player['inv'][item_name] = player['inv'].get(item_name, 0) + batch
+        target['stock'] -= batch
+        total_bought += batch
         
-        for _ in range(batch):
-            player['money'] -= target['price']
-            total_spent += target['price']
-            player['inv'][item_name] = player['inv'].get(item_name, 0) + 1
-            target['stock'] -= 1
-            total_bought += 1
-            batch_prices.append(target['price'])
-        
-        avg_price = sum(batch_prices) // len(batch_prices)
-        log_msg = f"➤ {total_bought}/{qty} 구매 중... (체결가: {target['price']}냥 | 평균가: {avg_price}냥)"
+        # 로그 기록
+        log_msg = f"➤ {total_bought}/{qty} 구매 중... (체결가: {target['price']}냥)"
         st.session_state.trade_logs[log_key].append(log_msg)
         
         with progress_placeholder.container():
-            for log in st.session_state.trade_logs[log_key][-10:]:
+            # 마지막 5줄만 표시하여 속도 향상
+            for log in st.session_state.trade_logs[log_key][-5:]:
                 st.markdown(f"<div class='trade-line'>{log}</div>", unsafe_allow_html=True)
         
-        time.sleep(0.05)
-    
-    # 🔥 [수정 포인트] 거래 완료 후 메시지 저장
+        # 0.01초 대기 (시각적 효과)
+        time.sleep(0.01)
+
+    # ⭐ 거래 완료 후 최종 성공 로그를 세션에 저장
     if total_bought > 0:
-        final_msg = f"✅ {item_name} 총 {total_bought}개 구매 완료! (소모: {total_spent:,}냥)"
-        st.session_state.last_trade_result = final_msg # 세션에 저장하여 리프레시 후에도 유지
-        st.toast(final_msg) # 우측 하단 팝업 알림
-        
+        st.session_state.last_trade_result = f"✅ {item_name} 총 {total_bought}개 구매 완료! (소모: {total_spent:,}냥)"
+    
     return total_bought, total_spent
 
 def process_sell(player, items_info, market_data, pos, item_name, qty, progress_placeholder, log_key):
@@ -683,10 +686,6 @@ if doc:
             st.session_state.current_tab = 0
             
         tab1, tab2, tab3, tab4, tab5 = st.tabs(["🛒 저잣거리", "📦 인벤토리", "⚔️ 용병", "📊 통계", "⚙️ 이동"])
-        
-        with tab1:
-            # 기존 tab1 내용 (저잣거리 판매/구매 등)
-            pass
         
         with tab1:
             if player['pos'] == "용병 고용소":
@@ -1084,6 +1083,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
