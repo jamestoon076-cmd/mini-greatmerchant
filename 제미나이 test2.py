@@ -557,8 +557,10 @@ doc = connect_gsheet()
 init_session_state()
 
 # ⭐ 1. 자동 새로고침 (반드시 코드 최상단에 위치)
+# --- 아래 내용을 완전히 삭제하세요 ---
 from streamlit_autorefresh import st_autorefresh
-#st_autorefresh(interval=1000, key="gametimer_refresh")
+st_autorefresh(interval=1000, key="gametimer_refresh")
+# -------------------------------
 
 if doc:
     if not st.session_state.game_started:
@@ -1073,6 +1075,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
