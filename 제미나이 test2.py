@@ -765,7 +765,7 @@ if doc:
                             trend = "■"
                         
                        with st.container():
-                            # 이미지와 아이템명을 한 줄에 표시 (컬럼 비율 조정)
+                            # 이미지와 아이템명을 한 줄에 표시
                             col_img, col_name = st.columns([1, 5])  # [1, 8] → [1, 5]로 변경
                             
                             # 이미지 URL 가져오기 및 변환
@@ -788,8 +788,8 @@ if doc:
                             else:
                                 col_img.markdown("📦")
                             
-                            # ⭐ 중요: col_name 대신 markdown 직접 사용
-                            st.markdown(f"**{item_name}** {trend}")
+                            # 아이템명과 가격 동향 (col_name 사용)
+                            col_name.markdown(f"**{item_name}** {trend}")
                             
                             # 나머지 코드 (가격, 재고 등)...
                             
@@ -1080,6 +1080,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
