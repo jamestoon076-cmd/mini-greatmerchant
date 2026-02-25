@@ -999,7 +999,8 @@ if doc:
                         option_text = f"{t} (💰 {cost:,}냥)"
                         move_options.append(option_text)
                         move_dict[option_text] = (t, cost)
-                
+
+                # --- 마을 이동 버튼 로직 부분 ---
                 if move_options:
                     selected = st.selectbox("이동할 마을", move_options)
                     if st.button("🚀 이동", use_container_width=True):
@@ -1010,7 +1011,7 @@ if doc:
                             # 이동 전 도시 이름 저장 (로그 삭제용)
                             current_city = player['pos']
                             
-                            # 1. 거래 로그 및 결과 로그 삭제 (기존 로직 유지)
+                            # 1. 상세 거래 로그 삭제 (기존 로직)
                             keys_to_delete = [k for k in st.session_state.trade_logs.keys() if k.startswith(f"{current_city}_")]
                             for key in keys_to_delete:
                                 del st.session_state.trade_logs[key]
@@ -1019,16 +1020,19 @@ if doc:
                             for key in result_keys_to_delete:
                                 del st.session_state[key]
                             
+                            # ⭐ [추가] 상단에 떠 있는 초록색 결과 박스(매수/매도 완료 로그) 삭제
+                            if 'last_trade_result' in st.session_state:
+                                del st.session_state['last_trade_result']
+                            
                             # 2. 위치 변경 및 탭 초기화
                             player['pos'] = dest
                             st.session_state.current_tab = 0
                             
-                            # ❌ NameError 원인 제거: money_placeholder.metric 줄을 삭제했습니다.
-                            # 대신 아래 st.success와 st.rerun()이 화면을 새로고침하며 돈과 위치를 업데이트합니다.
-                            
+                            # 이동 성공 메시지 (잠깐 표시됨)
                             st.success(f"✅ {dest}(으)로 이동했습니다! (비용: {cost:,}냥)")
                             
-                            # 3. ✅ 도시가 바뀌었으므로 '강제 새로고침' 수행
+                            # 3. ✅ 도시가 바뀌었으므로 '강제 새로고침'
+                            # 새로고침이 되면 상단의 last_trade_result가 없으므로 로그가 사라집니다.
                             st.rerun()
                         else:
                             st.error("❌ 잔액이 부족합니다.")
@@ -1051,6 +1055,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
