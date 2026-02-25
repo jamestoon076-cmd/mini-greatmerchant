@@ -1018,17 +1018,19 @@ if doc:
                 selected_move = st.selectbox("목적지 선택", move_options, key="move_selectbox")
                 
                 if st.button("🚀 이동", use_container_width=True):
-                    dest, cost = move_dict[selected_move] # NameError 해결: selected를 selected_move로 변경
+                    # NameError 방지: selectbox의 결과인 selected_move를 사용
+                    dest, cost = move_dict[selected_move] 
+                    
                     if player['money'] >= cost:
-                        # 1. 데이터 변경
+                        # 데이터 변경
                         player['money'] -= cost
                         player['pos'] = dest
                         
-                        # 2. 기존 마을의 거래 로그 삭제
+                        # 이동 전 도시의 거래 로그 알림 삭제
                         if 'last_trade_result' in st.session_state:
                             del st.session_state['last_trade_result']
                             
-                        # 3. ⭐ 핵심: 탭 초기화 (키값 증가로 첫 번째 탭 강제 복귀)
+                        # ⭐ 핵심: 탭 초기화 (tab_key를 증가시켜 위젯을 새로 고침)
                         if 'tab_key' not in st.session_state:
                             st.session_state.tab_key = 0
                         st.session_state.tab_key += 1
@@ -1056,6 +1058,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
