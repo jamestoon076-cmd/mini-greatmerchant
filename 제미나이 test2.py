@@ -713,12 +713,13 @@ if doc:
 
        # 📑 7. 탭 메뉴 구성
         if 'tab_key' not in st.session_state:
-            st.session_state.tab_key = 0  # 탭을 새로고침하기 위한 고유 키
+            st.session_state.tab_key = 0
         
-        # key=f"tabs_{st.session_state.tab_key}" 를 추가합니다.
+        # 안전하게 키값을 가져와서 생성
+        t_key = st.session_state.tab_key
         tab1, tab2, tab3, tab4, tab5 = st.tabs(
             ["🛒 저잣거리", "📦 인벤토리", "⚔️ 용병", "📊 통계", "⚙️ 이동"],
-            key=f"tabs_{st.session_state.tab_key}"
+            key=f"tabs_{t_key}"
         )
         
         with tab1:
@@ -1037,32 +1038,26 @@ if doc:
                         move_dict[option_text] = (t, cost)
 
                 # --- 마을 이동 버튼 로직 부분 ---
-                if move_options:
-                    selected = st.selectbox("이동할 마을", move_options)
                     if st.button("🚀 이동", use_container_width=True):
                         dest, cost = move_dict[selected]
                         if player['money'] >= cost:
-                            # 1. 이동 전 도시 이름 먼저 저장 (로그 삭제용)
-                            current_city = player['pos'] 
+                            # 1. 이동 전 도시 이름 저장 (로그 삭제용)
+                            current_city = player['pos']
                             
-                            # 2. 비용 지불 및 위치 변경
+                            # 2. 데이터 변경
                             player['money'] -= cost
-                            player['pos'] = dest 
+                            player['pos'] = dest
                             
-                            # 3. 상세 거래 로그 및 결과 로그 삭제
-                            keys_to_delete = [k for k in st.session_state.trade_logs.keys() if k.startswith(f"{current_city}_")]
-                            for key in keys_to_delete:
-                                del st.session_state.trade_logs[key]
-                                
+                            # 3. 로그 삭제
                             if 'last_trade_result' in st.session_state:
                                 del st.session_state['last_trade_result']
-                            
-                            # 4. ⭐ 탭 초기화를 위한 키 증가 (에러 방지용 get 사용)
+                                
+                            # 4. 탭 초기화 (키값 증가)
                             if 'tab_key' not in st.session_state:
                                 st.session_state.tab_key = 0
                             st.session_state.tab_key += 1
                             
-                            st.success(f"✅ {dest}(으)로 이동했습니다! (비용: {cost:,}냥)")
+                            st.success(f"✅ {dest}(으)로 이동했습니다!")
                             st.rerun()
                         else:
                             st.error("❌ 잔액이 부족합니다.")
@@ -1081,6 +1076,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
