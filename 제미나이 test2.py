@@ -1020,19 +1020,19 @@ if doc:
                             for key in result_keys_to_delete:
                                 del st.session_state[key]
                             
-                            # ⭐ [추가] 상단에 떠 있는 초록색 결과 박스(매수/매도 완료 로그) 삭제
+                            # ⭐ [추가] 상단 거래 결과 로그(초록색 박스) 삭제
                             if 'last_trade_result' in st.session_state:
                                 del st.session_state['last_trade_result']
                             
                             # 2. 위치 변경 및 탭 초기화
                             player['pos'] = dest
+                            # ⭐ 탭 인덱스를 0(저잣거리)으로 강제 설정
                             st.session_state.current_tab = 0
                             
-                            # 이동 성공 메시지 (잠깐 표시됨)
                             st.success(f"✅ {dest}(으)로 이동했습니다! (비용: {cost:,}냥)")
                             
                             # 3. ✅ 도시가 바뀌었으므로 '강제 새로고침'
-                            # 새로고침이 되면 상단의 last_trade_result가 없으므로 로그가 사라집니다.
+                            # 새로고침 시 current_tab이 0이므로 저잣거리 탭이 열립니다.
                             st.rerun()
                         else:
                             st.error("❌ 잔액이 부족합니다.")
@@ -1055,6 +1055,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
