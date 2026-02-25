@@ -711,11 +711,15 @@ if doc:
 
         sync_time_ui()
 
-        # 📑 7. 탭 메뉴 구성
-        if 'current_tab' not in st.session_state:
-            st.session_state.current_tab = 0
-            
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(["🛒 저잣거리", "📦 인벤토리", "⚔️ 용병", "📊 통계", "⚙️ 이동"])
+       # 📑 7. 탭 메뉴 구성
+        if 'tab_key' not in st.session_state:
+            st.session_state.tab_key = 0  # 탭을 새로고침하기 위한 고유 키
+        
+        # key=f"tabs_{st.session_state.tab_key}" 를 추가합니다.
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(
+            ["🛒 저잣거리", "📦 인벤토리", "⚔️ 용병", "📊 통계", "⚙️ 이동"],
+            key=f"tabs_{st.session_state.tab_key}"
+        )
         
         with tab1:
             if player['pos'] == "용병 고용소":
@@ -1033,12 +1037,11 @@ if doc:
                         move_dict[option_text] = (t, cost)
 
                 # --- 마을 이동 버튼 로직 부분 ---
-                if move_options:
-                    selected = st.selectbox("이동할 마을", move_options)
                     if st.button("🚀 이동", use_container_width=True):
                         dest, cost = move_dict[selected]
                         if player['money'] >= cost:
                             player['money'] -= cost
+                            player['pos'] = dest
                             
                             # 이동 전 도시 이름 저장 (로그 삭제용)
                             current_city = player['pos']
@@ -1059,7 +1062,7 @@ if doc:
                             # 2. 위치 변경 및 탭 초기화
                             player['pos'] = dest
                             # ⭐ 탭 인덱스를 0(저잣거리)으로 강제 설정
-                            st.session_state.current_tab = 0
+                            st.session_state.tab_key += 1
                             
                             st.success(f"✅ {dest}(으)로 이동했습니다! (비용: {cost:,}냥)")
                             
@@ -1087,6 +1090,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
