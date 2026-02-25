@@ -694,10 +694,14 @@ if doc:
         sync_time_ui()
 
         # 📑 7. 탭 메뉴 구성
-        if 'current_tab' not in st.session_state:
-            st.session_state.current_tab = 0
+        if 'tab_key' not in st.session_state:
+            st.session_state.tab_key = 0
             
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(["🛒 저잣거리", "📦 인벤토리", "⚔️ 용병", "📊 통계", "⚙️ 이동"])
+        # key를 사용하여 도시 이동 시 탭을 강제 리셋함
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(
+            ["🛒 저잣거리", "📦 인벤토리", "⚔️ 용병", "📊 통계", "⚙️ 이동"],
+            key=f"tabs_{st.session_state.tab_key}"
+        )
         
         with tab1:
             if player['pos'] == "용병 고용소":
@@ -1017,8 +1021,8 @@ if doc:
                 # --- 마을 이동 버튼 로직 부분 ---
                 selected_move = st.selectbox("목적지 선택", move_options, key="move_selectbox")
                 
-                if st.button("🚀 이동", use_container_width=True):
-                    # NameError 방지: selectbox의 결과인 selected_move를 사용
+               if st.button("🚀 이동", use_container_width=True):
+                    # NameError 방지를 위해 실제 선택된 변수명 확인 필요
                     dest, cost = move_dict[selected_move] 
                     
                     if player['money'] >= cost:
@@ -1026,21 +1030,19 @@ if doc:
                         player['money'] -= cost
                         player['pos'] = dest
                         
-                        # 이동 전 도시의 거래 로그 알림 삭제
+                        # 1. 기존 알림 삭제
                         if 'last_trade_result' in st.session_state:
                             del st.session_state['last_trade_result']
                             
-                        # ⭐ 핵심: 탭 초기화 (tab_key를 증가시켜 위젯을 새로 고침)
-                        if 'tab_key' not in st.session_state:
-                            st.session_state.tab_key = 0
+                        # 2. ⭐ 핵심: 탭 초기화를 위해 키값 증가
                         st.session_state.tab_key += 1
                         
-                        st.success(f"✅ {dest}(으)로 이동했습니다! (비용: {cost:,}냥)")
-                        st.rerun()
+                        st.success(f"✅ {dest}(으)로 이동했습니다!")
+                        st.rerun()  # 즉시 반영
                     else:
                         st.error("❌ 잔액이 부족합니다.")
-                else:
-                    st.write("이동 가능한 마을이 없습니다")
+                                else:
+                                    st.write("이동 가능한 마을이 없습니다")
                     
                 st.divider()
             
@@ -1058,6 +1060,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
