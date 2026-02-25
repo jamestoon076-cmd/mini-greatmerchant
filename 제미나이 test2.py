@@ -696,8 +696,7 @@ if doc:
         # 📑 7. 탭 메뉴 구성
         if 'tab_key' not in st.session_state:
             st.session_state.tab_key = 0
-
-        # 반드시 tab_key 초기화 코드 바로 아래에 위치해야 합니다.
+            
         tab1, tab2, tab3, tab4, tab5 = st.tabs(
             ["🛒 저잣거리", "📦 인벤토리", "⚔️ 용병", "📊 통계", "⚙️ 이동"],
             key=f"tabs_{st.session_state.tab_key}"
@@ -1021,11 +1020,9 @@ if doc:
                 # --- 마을 이동 버튼 로직 부분 ---
                 selected_move = st.selectbox("목적지 선택", list(move_options.keys()), key="move_selectbox")
                 
-                # 1024행: 이동 버튼 (들여쓰기 교정 완료)
                 if st.button("🚀 이동", use_container_width=True):
                     dest, cost = move_options[selected_move]
                     if player['money'] >= cost:
-                        # 1. 데이터 변경
                         player['money'] -= cost
                         player['pos'] = dest
                         
@@ -1035,7 +1032,7 @@ if doc:
                         
                         # 3. ⭐ 탭을 저잣거리(첫 번째)로 초기화하는 핵심 코드
                         # st.tabs에 key=f"tabs_{st.session_state.tab_key}"가 걸려 있어야 작동합니다.
-                        st.session_state.tab_key = st.session_state.get('tab_key', 0) + 1
+                        st.session_state.tab_key += 1 
                         
                         st.success(f"✅ {dest}(으)로 이동했습니다!")
                         st.rerun()
@@ -1058,6 +1055,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
