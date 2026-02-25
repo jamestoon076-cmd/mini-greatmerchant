@@ -1039,35 +1039,32 @@ if doc:
                         dest, cost = move_dict[selected]
                         if player['money'] >= cost:
                             player['money'] -= cost
-                            # 현재 도시의 로그 삭제 (이동 전 도시)
+                            
+                            # 이동 전 도시 이름 저장 (로그 삭제용)
                             current_city = player['pos']
                             
-                            # 거래 로그 삭제
-                            keys_to_delete = []
-                            for key in list(st.session_state.trade_logs.keys()):
-                                if key.startswith(f"{current_city}_"):
-                                    keys_to_delete.append(key)
+                            # 1. 거래 로그 및 결과 로그 삭제 (기존 로직 유지)
+                            keys_to_delete = [k for k in st.session_state.trade_logs.keys() if k.startswith(f"{current_city}_")]
                             for key in keys_to_delete:
                                 del st.session_state.trade_logs[key]
-                            
-                            # 결과 로그 삭제
-                            result_keys_to_delete = []
-                            for key in list(st.session_state.keys()):
-                                if key.startswith(f"result_{current_city}_"):
-                                    result_keys_to_delete.append(key)
+                                
+                            result_keys_to_delete = [k for k in st.session_state.keys() if k.startswith(f"result_{current_city}_")]
                             for key in result_keys_to_delete:
                                 del st.session_state[key]
                             
+                            # 2. 위치 변경 및 탭 초기화
                             player['pos'] = dest
-                            money_placeholder.metric("💰 소지금", f"{player['money']:,}냥")
-                            
-                            # ✅ 이동 후 저잣거리 탭(0)으로 전환
                             st.session_state.current_tab = 0
                             
-                            st.success(f"✅ {dest}로 이동했습니다!")
+                            # ❌ NameError 원인 제거: money_placeholder.metric 줄을 삭제했습니다.
+                            # 대신 아래 st.success와 st.rerun()이 화면을 새로고침하며 돈과 위치를 업데이트합니다.
+                            
+                            st.success(f"✅ {dest}(으)로 이동했습니다! (비용: {cost:,}냥)")
+                            
+                            # 3. ✅ 도시가 바뀌었으므로 '강제 새로고침' 수행
                             st.rerun()
                         else:
-                            st.error("❌ 잔액 부족")
+                            st.error("❌ 잔액이 부족합니다.")
                 else:
                     st.write("이동 가능한 마을이 없습니다")
             
@@ -1087,6 +1084,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
