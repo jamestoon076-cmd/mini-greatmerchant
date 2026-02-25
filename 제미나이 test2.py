@@ -1038,29 +1038,29 @@ if doc:
                         move_dict[option_text] = (t, cost)
 
                 # --- 마을 이동 버튼 로직 부분 ---
-                    if st.button("🚀 이동", use_container_width=True):
-                        dest, cost = move_dict[selected]
-                        if player['money'] >= cost:
-                            # 1. 이동 전 도시 이름 저장 (로그 삭제용)
-                            current_city = player['pos']
+                if st.button("🚀 이동", use_container_width=True):
+                    dest, cost = move_dict[selected]
+                    if player['money'] >= cost:
+                        # 1. 이동 전 도시 이름 저장 (로그 삭제용)
+                        current_city = player['pos']
+                        
+                        # 2. 데이터 변경
+                        player['money'] -= cost
+                        player['pos'] = dest
+                        
+                        # 3. 로그 삭제
+                        if 'last_trade_result' in st.session_state:
+                            del st.session_state['last_trade_result']
                             
-                            # 2. 데이터 변경
-                            player['money'] -= cost
-                            player['pos'] = dest
-                            
-                            # 3. 로그 삭제
-                            if 'last_trade_result' in st.session_state:
-                                del st.session_state['last_trade_result']
-                                
-                            # 4. 탭 초기화 (키값 증가)
-                            if 'tab_key' not in st.session_state:
-                                st.session_state.tab_key = 0
-                            st.session_state.tab_key += 1
-                            
-                            st.success(f"✅ {dest}(으)로 이동했습니다!")
-                            st.rerun()
-                        else:
-                            st.error("❌ 잔액이 부족합니다.")
+                        # 4. 탭 초기화 (키값 증가)
+                        if 'tab_key' not in st.session_state:
+                            st.session_state.tab_key = 0
+                        st.session_state.tab_key += 1
+                        
+                        st.success(f"✅ {dest}(으)로 이동했습니다!")
+                        st.rerun()
+                    else:
+                        st.error("❌ 잔액이 부족합니다.")
             
                     st.divider()
             
@@ -1076,6 +1076,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
