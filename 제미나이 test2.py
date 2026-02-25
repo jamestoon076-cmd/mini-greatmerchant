@@ -630,119 +630,271 @@ if doc:
         # ... 나머지 탭들
         
         with tab1:
-            if player['pos'] == "용병 고용소":
-                # ... 용병 고용 코드 (동일) ...
-            
-            elif player['pos'] in market_data:
-                items = list(market_data[player['pos']].keys())
-                if items:
-                    st.subheader(f"🛒 {player['pos']} 시세")
-                    
-                    for item_name in items:
-                        d = market_data[player['pos']][item_name]
-                        base_price = items_info[item_name]['base']
-                        
-                        # 가격 표시 (생략)
-                        
-                        with st.container():
-                            st.markdown(f"**{item_name}** {trend}")
-                            
-                            col1, col2, col3 = st.columns([2,1,1])
-                            price_ph = col1.empty()
-                            price_ph.markdown(f"<span class='{price_class}'>{d['price']:,}냥</span>", unsafe_allow_html=True)
-                            
-                            stock_ph = col2.empty()
-                            stock_ph.write(f"📦 {d['stock']}개")
-                            
-                            max_buy = calculate_max_purchase(
-                                player, items_info, market_data, 
-                                player['pos'], item_name, d['price']
-                            )
-                            max_ph = col3.empty()
-                            max_ph.write(f"⚡ {max_buy}개")
-                            
-                            col_a, col_b, col_c, col_d = st.columns([2,1,1,1])
-                            
-                            default_qty = st.session_state.last_qty.get(f"{player['pos']}_{item_name}", "1")
-                            qty = col_a.text_input("수량", value=default_qty, key=f"qty_{player['pos']}_{item_name}", label_visibility="collapsed")
-                            
-                            # 최대 버튼
-                            if col_d.button("🔝 최대", key=f"max_{item_name}", use_container_width=True):
-                                max_possible = calculate_max_purchase(player, items_info, market_data, player['pos'], item_name, d['price'])
-                                st.session_state.last_qty[f"{player['pos']}_{item_name}"] = str(max_possible)
-                                st.rerun()
-                            
-                            # ⭐ 진행상황 표시 영역
-                            progress_ph = st.empty()
-                            
-                            # ⭐ 저장된 로그 표시 (이 부분이 핵심!)
-                            for key in list(st.session_state.trade_logs.keys()):
-                                if key.startswith(f"{player['pos']}_{item_name}"):
-                                    with progress_ph.container():
-                                        st.markdown("<div class='trade-progress'>", unsafe_allow_html=True)
-                                        for log in st.session_state.trade_logs[key][-10:]:
-                                            st.markdown(f"<div class='trade-line'>{log}</div>", unsafe_allow_html=True)
-                                        st.markdown("</div>", unsafe_allow_html=True)
-                                    break
-                            
-                            # 매수 버튼
-                            if col_b.button("💰 매수", key=f"buy_{item_name}", use_container_width=True):
-                                try:
-                                    qty_int = int(qty)
-                                    if qty_int > 0:
-                                        log_key = f"{player['pos']}_{item_name}_{time.time()}"
-                                        
-                                        bought, spent = process_buy(
-                                            player, items_info, market_data,
-                                            player['pos'], item_name, qty_int, progress_ph, log_key
-                                        )
-                                        
-                                        if bought > 0:
-                                            st.session_state.stats['total_bought'] += bought
-                                            st.session_state.stats['total_spent'] += spent
-                                            st.session_state.stats['trade_count'] += 1
-                                            
-                                            st.session_state.last_qty[f"{player['pos']}_{item_name}"] = "1"
-                                            st.rerun()
-                                        else:
-                                            st.error("❌ 구매 가능한 수량이 없습니다.")
-                                    else:
-                                        st.error("❌ 0보다 큰 수량을 입력하세요")
-                                except ValueError:
-                                    st.error("❌ 올바른 숫자를 입력하세요")
-        
-                            # 매도 버튼 (동일한 로그 표시 로직 사용)
-                            if col_c.button("📦 매도", key=f"sell_{item_name}", use_container_width=True):
-                                try:
-                                    qty_int = int(qty)
-                                    if qty_int > 0:
-                                        log_key = f"{player['pos']}_{item_name}_{time.time()}"
-                                        
-                                        sold, earned = process_sell(
-                                            player, items_info, market_data,
-                                            player['pos'], item_name, qty_int, progress_ph, log_key
-                                        )
-                                        
-                                        if sold > 0:
-                                            st.session_state.stats['total_sold'] += sold
-                                            st.session_state.stats['total_earned'] += earned
-                                            st.session_state.stats['trade_count'] += 1
-                                            
-                                            st.session_state.last_qty[f"{player['pos']}_{item_name}"] = "1"
-                                            st.rerun()
-                                        else:
-                                            st.error("❌ 판매할 수 있는 아이템이 없습니다.")
-                                    else:
-                                        st.error("❌ 0보다 큰 수량을 입력하세요")
-                                except ValueError:
-                                    st.error("❌ 올바른 숫자를 입력하세요")
-                            
-                            st.divider()
-                else:
-                    st.warning("이 마을에는 판매 품목이 없습니다.")
-            else:
-                st.warning("시장 정보를 불러올 수 없습니다.")
+        if player['pos'] == "용병 고용소":
+            st.subheader("⚔️ 용병 고용")
+            if merc_data:
+                max_mercs = int(settings.get('max_mercenaries', 5))
+                st.info(f"**현재 용병: {len(player['mercs'])}/{max_mercs}명**")
                 
+                for name, data in merc_data.items():
+                    count = sum(1 for m in player['mercs'] if m == name)
+                    
+                    with st.container():
+                        st.info(f"**{name}** (고용중: {count}명)\n\n"
+                            f"💰 고용비: {data['price']:,}냥\n"
+                            f"⚖️ 무게보너스: +{data['w_bonus']}근")
+                        
+                        if len(player['mercs']) >= max_mercs:
+                            st.button(f"❌ 최대 인원({max_mercs}명)", key=f"merc_{name}_full", disabled=True, use_container_width=True)
+                        else:
+                            if st.button(f"⚔️ {name} 고용", key=f"merc_{name}_{count}", use_container_width=True):
+                                if player['money'] >= data['price']:
+                                    player['money'] -= data['price']
+                                    player['mercs'].append(name)
+                                    st.success(f"✅ {name} 고용 완료! (총 {len(player['mercs'])}/{max_mercs}명)")
+                                    st.rerun()
+                                else:
+                                    st.error("❌ 잔액 부족")
+            else:
+                st.warning("고용 가능한 용병이 없습니다.")
+        
+        elif player['pos'] in market_data:
+            items = list(market_data[player['pos']].keys())
+            if items:
+                st.subheader(f"🛒 {player['pos']} 시세")
+                
+                for item_name in items:
+                    d = market_data[player['pos']][item_name]
+                    base_price = items_info[item_name]['base']
+                    
+                    # 가격 등락에 따른 아이콘 표시
+                    if d['price'] > base_price * 1.2:
+                        price_class = "price-up"
+                        trend = "▲▲"
+                    elif d['price'] > base_price:
+                        price_class = "price-up"
+                        trend = "▲"
+                    elif d['price'] < base_price * 0.8:
+                        price_class = "price-down"
+                        trend = "▼▼"
+                    elif d['price'] < base_price:
+                        price_class = "price-down"
+                        trend = "▼"
+                    else:
+                        price_class = "price-same"
+                        trend = "■"
+                    
+                    with st.container():
+                        st.markdown(f"**{item_name}** {trend}")
+                        
+                        col1, col2, col3 = st.columns([2,1,1])
+                        price_ph = col1.empty()
+                        price_ph.markdown(f"<span class='{price_class}'>{d['price']:,}냥</span>", unsafe_allow_html=True)
+                        
+                        stock_ph = col2.empty()
+                        stock_ph.write(f"📦 {d['stock']}개")
+                        
+                        max_buy = calculate_max_purchase(
+                            player, items_info, market_data, 
+                            player['pos'], item_name, d['price']
+                        )
+                        max_ph = col3.empty()
+                        max_ph.write(f"⚡ {max_buy}개")
+                        
+                        col_a, col_b, col_c, col_d = st.columns([2,1,1,1])
+                        
+                        default_qty = st.session_state.last_qty.get(f"{player['pos']}_{item_name}", "1")
+                        qty = col_a.text_input("수량", value=default_qty, key=f"qty_{player['pos']}_{item_name}", label_visibility="collapsed")
+                        
+                        # 최대 버튼
+                        if col_d.button("🔝 최대", key=f"max_{item_name}", use_container_width=True):
+                            max_possible = calculate_max_purchase(player, items_info, market_data, player['pos'], item_name, d['price'])
+                            st.session_state.last_qty[f"{player['pos']}_{item_name}"] = str(max_possible)
+                            st.rerun()
+                        
+                        # 진행상황 표시 영역
+                        progress_ph = st.empty()
+                        
+                        # 저장된 로그 표시
+                        for key in list(st.session_state.trade_logs.keys()):
+                            if key.startswith(f"{player['pos']}_{item_name}"):
+                                with progress_ph.container():
+                                    st.markdown("<div class='trade-progress'>", unsafe_allow_html=True)
+                                    for log in st.session_state.trade_logs[key][-10:]:
+                                        st.markdown(f"<div class='trade-line'>{log}</div>", unsafe_allow_html=True)
+                                    st.markdown("</div>", unsafe_allow_html=True)
+                                break
+                        
+                        # 매수 버튼
+                        if col_b.button("💰 매수", key=f"buy_{item_name}", use_container_width=True):
+                            try:
+                                qty_int = int(qty)
+                                if qty_int > 0:
+                                    log_key = f"{player['pos']}_{item_name}_{time.time()}"
+                                    
+                                    bought, spent = process_buy(
+                                        player, items_info, market_data,
+                                        player['pos'], item_name, qty_int, progress_ph, log_key
+                                    )
+                                    
+                                    if bought > 0:
+                                        st.session_state.stats['total_bought'] += bought
+                                        st.session_state.stats['total_spent'] += spent
+                                        st.session_state.stats['trade_count'] += 1
+                                        
+                                        st.session_state.last_qty[f"{player['pos']}_{item_name}"] = "1"
+                                        st.rerun()
+                                    else:
+                                        st.error("❌ 구매 가능한 수량이 없습니다.")
+                                else:
+                                    st.error("❌ 0보다 큰 수량을 입력하세요")
+                            except ValueError:
+                                st.error("❌ 올바른 숫자를 입력하세요")
+
+                        # 매도 버튼
+                        if col_c.button("📦 매도", key=f"sell_{item_name}", use_container_width=True):
+                            try:
+                                qty_int = int(qty)
+                                if qty_int > 0:
+                                    log_key = f"{player['pos']}_{item_name}_{time.time()}"
+                                    
+                                    sold, earned = process_sell(
+                                        player, items_info, market_data,
+                                        player['pos'], item_name, qty_int, progress_ph, log_key
+                                    )
+                                    
+                                    if sold > 0:
+                                        st.session_state.stats['total_sold'] += sold
+                                        st.session_state.stats['total_earned'] += earned
+                                        st.session_state.stats['trade_count'] += 1
+                                        
+                                        st.session_state.last_qty[f"{player['pos']}_{item_name}"] = "1"
+                                        st.rerun()
+                                    else:
+                                        st.error("❌ 판매할 수 있는 아이템이 없습니다.")
+                                else:
+                                    st.error("❌ 0보다 큰 수량을 입력하세요")
+                            except ValueError:
+                                st.error("❌ 올바른 숫자를 입력하세요")
+                        
+                        st.divider()
+            else:
+                st.warning("이 마을에는 판매 품목이 없습니다.")
+        else:
+            st.warning("시장 정보를 불러올 수 없습니다.")
+                if player['pos'] == "용병 고용소":
+                    # ... 용병 고용 코드 (동일) ...
+                
+                elif player['pos'] in market_data:
+                    items = list(market_data[player['pos']].keys())
+                    if items:
+                        st.subheader(f"🛒 {player['pos']} 시세")
+                        
+                        for item_name in items:
+                            d = market_data[player['pos']][item_name]
+                            base_price = items_info[item_name]['base']
+                            
+                            # 가격 표시 (생략)
+                            
+                            with st.container():
+                                st.markdown(f"**{item_name}** {trend}")
+                                
+                                col1, col2, col3 = st.columns([2,1,1])
+                                price_ph = col1.empty()
+                                price_ph.markdown(f"<span class='{price_class}'>{d['price']:,}냥</span>", unsafe_allow_html=True)
+                                
+                                stock_ph = col2.empty()
+                                stock_ph.write(f"📦 {d['stock']}개")
+                                
+                                max_buy = calculate_max_purchase(
+                                    player, items_info, market_data, 
+                                    player['pos'], item_name, d['price']
+                                )
+                                max_ph = col3.empty()
+                                max_ph.write(f"⚡ {max_buy}개")
+                                
+                                col_a, col_b, col_c, col_d = st.columns([2,1,1,1])
+                                
+                                default_qty = st.session_state.last_qty.get(f"{player['pos']}_{item_name}", "1")
+                                qty = col_a.text_input("수량", value=default_qty, key=f"qty_{player['pos']}_{item_name}", label_visibility="collapsed")
+                                
+                                # 최대 버튼
+                                if col_d.button("🔝 최대", key=f"max_{item_name}", use_container_width=True):
+                                    max_possible = calculate_max_purchase(player, items_info, market_data, player['pos'], item_name, d['price'])
+                                    st.session_state.last_qty[f"{player['pos']}_{item_name}"] = str(max_possible)
+                                    st.rerun()
+                                
+                                # ⭐ 진행상황 표시 영역
+                                progress_ph = st.empty()
+                                
+                                # ⭐ 저장된 로그 표시 (이 부분이 핵심!)
+                                for key in list(st.session_state.trade_logs.keys()):
+                                    if key.startswith(f"{player['pos']}_{item_name}"):
+                                        with progress_ph.container():
+                                            st.markdown("<div class='trade-progress'>", unsafe_allow_html=True)
+                                            for log in st.session_state.trade_logs[key][-10:]:
+                                                st.markdown(f"<div class='trade-line'>{log}</div>", unsafe_allow_html=True)
+                                            st.markdown("</div>", unsafe_allow_html=True)
+                                        break
+                                
+                                # 매수 버튼
+                                if col_b.button("💰 매수", key=f"buy_{item_name}", use_container_width=True):
+                                    try:
+                                        qty_int = int(qty)
+                                        if qty_int > 0:
+                                            log_key = f"{player['pos']}_{item_name}_{time.time()}"
+                                            
+                                            bought, spent = process_buy(
+                                                player, items_info, market_data,
+                                                player['pos'], item_name, qty_int, progress_ph, log_key
+                                            )
+                                            
+                                            if bought > 0:
+                                                st.session_state.stats['total_bought'] += bought
+                                                st.session_state.stats['total_spent'] += spent
+                                                st.session_state.stats['trade_count'] += 1
+                                                
+                                                st.session_state.last_qty[f"{player['pos']}_{item_name}"] = "1"
+                                                st.rerun()
+                                            else:
+                                                st.error("❌ 구매 가능한 수량이 없습니다.")
+                                        else:
+                                            st.error("❌ 0보다 큰 수량을 입력하세요")
+                                    except ValueError:
+                                        st.error("❌ 올바른 숫자를 입력하세요")
+            
+                                # 매도 버튼 (동일한 로그 표시 로직 사용)
+                                if col_c.button("📦 매도", key=f"sell_{item_name}", use_container_width=True):
+                                    try:
+                                        qty_int = int(qty)
+                                        if qty_int > 0:
+                                            log_key = f"{player['pos']}_{item_name}_{time.time()}"
+                                            
+                                            sold, earned = process_sell(
+                                                player, items_info, market_data,
+                                                player['pos'], item_name, qty_int, progress_ph, log_key
+                                            )
+                                            
+                                            if sold > 0:
+                                                st.session_state.stats['total_sold'] += sold
+                                                st.session_state.stats['total_earned'] += earned
+                                                st.session_state.stats['trade_count'] += 1
+                                                
+                                                st.session_state.last_qty[f"{player['pos']}_{item_name}"] = "1"
+                                                st.rerun()
+                                            else:
+                                                st.error("❌ 판매할 수 있는 아이템이 없습니다.")
+                                        else:
+                                            st.error("❌ 0보다 큰 수량을 입력하세요")
+                                    except ValueError:
+                                        st.error("❌ 올바른 숫자를 입력하세요")
+                                
+                                st.divider()
+                    else:
+                        st.warning("이 마을에는 판매 품목이 없습니다.")
+                else:
+                    st.warning("시장 정보를 불러올 수 없습니다.")
+                    
         with tab2:
             st.subheader("📦 내 인벤토리")
             if player['inv']:
