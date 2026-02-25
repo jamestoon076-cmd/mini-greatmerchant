@@ -645,42 +645,37 @@ if doc:
                 st.info(ed['message'])
             else:
                 del st.session_state.event_display
-
-        # --- 상단 UI 표시 (디자인 유지) ---
+        
+        # --- 상단 UI 표시 ---
         st.title(f"🏯 {player['pos']}")
 
-        # 1. 5초 알림 로직 (디자인 유지)
-        if 'event_display' in st.session_state:
-            ed = st.session_state.event_display
-            if time.time() - ed['time'] < 5:
-                st.info(ed['message'])
-            else:
-                del st.session_state.event_display
-
-        # 2. 소지금과 무게는 즉각적인 반응을 위해 상단에 고정
         top_col1, top_col2 = st.columns(2)
         top_col1.metric("💰 소지금", f"{player['money']:,}냥")
         top_col2.metric("⚖️ 무게", f"{cw}/{tw}근")
 
-        # 3. ⭐ 시간과 카운트다운만 1초마다 부분 업데이트 (입력 방해 방지)
+        # ⭐ 시간 전용 프래그먼트 (새로고침 없이 내부 데이터만 갱신)
         @st.fragment(run_every="1s")
         def sync_time_ui():
-            # 시간 계산
+            # 백그라운드에서 시간 및 재고 데이터 갱신 (리런 없이 실행)
+            # 이 함수가 내부적으로 player['week']와 market_data를 직접 수정합니다.
+            st.session_state.player, _ = update_game_time(
+                st.session_state.player, 
+                st.session_state.settings, 
+                st.session_state.market_data, 
+                st.session_state.initial_stocks
+            )
+            
+            # 현재 남은 시간 계산
             sec_per_month = int(settings.get('seconds_per_month', 180))
             sec_per_week = sec_per_month / 4
-            elapsed_since_ref = time.time() - st.session_state.last_time_update
-            remaining = max(0, int(sec_per_week - elapsed_since_ref))
+            elapsed = time.time() - st.session_state.last_time_update
+            remaining = max(0, int(sec_per_week - elapsed))
             
-            # 시간이 다 되면 전체 새로고침하여 주차 업데이트
-            if remaining <= 0:
-                st.rerun()
+            t_col1, t_col2 = st.columns(2)
+            # 현재 세션의 최신 시간 정보를 가져와 표시
+            t_col1.metric("📅 시간", get_time_display(st.session_state.player))
+            t_col2.metric("⏰ 다음 주까지", f"{int(remaining)}초")
 
-            # UI 레이아웃 유지 (col3, col4 역할)
-            time_col1, time_col2 = st.columns(2)
-            time_col1.metric("📅 시간", get_time_display(player))
-            time_col2.metric("⏰ 다음 주까지", f"{remaining}초")
-
-        # 함수 실행
         sync_time_ui()
 
         # 📑 7. 탭 메뉴 구성
@@ -1092,6 +1087,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
