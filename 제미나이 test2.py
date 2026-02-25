@@ -764,10 +764,11 @@ if doc:
                             price_class = "price-same"
                             trend = "■"
                         
-                        with st.container():
-                            col_img, col_name = st.columns([1, 8])
+                       with st.container():
+                            # 이미지와 아이템명을 한 줄에 표시 (컬럼 비율 조정)
+                            col_img, col_name = st.columns([1, 5])  # [1, 8] → [1, 5]로 변경
                             
-                            # 이미지 URL 가져오기
+                            # 이미지 URL 가져오기 및 변환
                             img_url = items_info[item_name].get('image', '')
                             
                             # 구글 드라이브 URL 변환
@@ -778,18 +779,19 @@ if doc:
                                 except:
                                     pass
                             
-                            # 이미지 표시 시도
-                            if img_url:
+                            # 이미지 표시
+                            if img_url and img_url.strip():
                                 try:
-                                    col_img.image(img_url, width=35)
+                                    col_img.image(img_url, width=30)
                                 except:
-                                    col_img.markdown("📦")  # 실패시 기본 아이콘
+                                    col_img.markdown("📦")
                             else:
-                                col_img.markdown("📦")  # URL 없을 때 기본 아이콘
+                                col_img.markdown("📦")
                             
-                            col_name.markdown(f"**{item_name}** {trend}")
+                            # ⭐ 중요: col_name 대신 markdown 직접 사용
+                            st.markdown(f"**{item_name}** {trend}")
                             
-                            # ... 나머지 코드 ...
+                            # 나머지 코드 (가격, 재고 등)...
                             
                             # 아이템명과 가격 동향
                             col_name.markdown(f"**{item_name}** {trend}")
@@ -1078,6 +1080,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
