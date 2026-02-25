@@ -1044,10 +1044,10 @@ if doc:
                         
                         st.success(f"✅ {dest}(으)로 이동했습니다! (비용: {cost:,}냥)")
                         st.rerun()
-                        else:
-                            st.error("❌ 잔액이 부족합니다.")
-                            else:
-                                st.write("이동 가능한 마을이 없습니다")
+                    else:
+                        st.error("❌ 잔액이 부족합니다.")
+                else:
+                    st.write("이동 가능한 마을이 없습니다")
                     
                 st.divider()
             
@@ -1065,6 +1065,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
