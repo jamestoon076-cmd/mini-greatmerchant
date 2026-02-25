@@ -558,7 +558,7 @@ init_session_state()
 
 # ⭐ 1. 자동 새로고침 (반드시 코드 최상단에 위치)
 from streamlit_autorefresh import st_autorefresh
-st_autorefresh(interval=1000, key="gametimer_refresh")
+#st_autorefresh(interval=1000, key="gametimer_refresh")
 
 if doc:
     if not st.session_state.game_started:
@@ -629,21 +629,40 @@ if doc:
 
         # --- 상단 UI 표시 (디자인 유지) ---
         st.title(f"🏯 {player['pos']}")
-        
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("💰 소지금", f"{player['money']:,}냥")
-        col2.metric("⚖️ 무게", f"{cw}/{tw}근")
-        col3.metric("📅 시간", get_time_display(player))
-        
-        # ⏳ 6. 실시간 카운트다운 계산 (0초 멈춤 보정)
-        sec_per_month = int(settings.get('seconds_per_month', 180))
-        sec_per_week = sec_per_month / 4
-        elapsed_since_ref = time.time() - st.session_state.last_time_update
-        
-        remaining = max(0, int(sec_per_week - elapsed_since_ref))
-        if remaining <= 0: remaining = int(sec_per_week) # 즉시 다음 주로 시각적 갱신
+
+        # 1. 5초 알림 로직 (디자인 유지)
+        if 'event_display' in st.session_state:
+            ed = st.session_state.event_display
+            if time.time() - ed['time'] < 5:
+                st.info(ed['message'])
+            else:
+                del st.session_state.event_display
+
+        # 2. 소지금과 무게는 즉각적인 반응을 위해 상단에 고정
+        top_col1, top_col2 = st.columns(2)
+        top_col1.metric("💰 소지금", f"{player['money']:,}냥")
+        top_col2.metric("⚖️ 무게", f"{cw}/{tw}근")
+
+        # 3. ⭐ 시간과 카운트다운만 1초마다 부분 업데이트 (입력 방해 방지)
+        @st.fragment(run_every="1s")
+        def sync_time_ui():
+            # 시간 계산
+            sec_per_month = int(settings.get('seconds_per_month', 180))
+            sec_per_week = sec_per_month / 4
+            elapsed_since_ref = time.time() - st.session_state.last_time_update
+            remaining = max(0, int(sec_per_week - elapsed_since_ref))
             
-        col4.metric("⏰ 다음 주까지", f"{remaining}초")
+            # 시간이 다 되면 전체 새로고침하여 주차 업데이트
+            if remaining <= 0:
+                st.rerun()
+
+            # UI 레이아웃 유지 (col3, col4 역할)
+            time_col1, time_col2 = st.columns(2)
+            time_col1.metric("📅 시간", get_time_display(player))
+            time_col2.metric("⏰ 다음 주까지", f"{remaining}초")
+
+        # 함수 실행
+        sync_time_ui()
 
         # 📑 7. 탭 메뉴 구성
         if 'current_tab' not in st.session_state:
@@ -1054,6 +1073,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
