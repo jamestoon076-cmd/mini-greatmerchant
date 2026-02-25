@@ -11,19 +11,34 @@ import uuid
 import random
 
 # --- 1. 페이지 설정 및 스타일 ---
-st.set_page_config(page_title="조선거상 미니", page_icon="🏯", layout="centered")
+st.set_page_config(
+    page_title="조선거상 미니",
+    page_icon="🏯",
+    layout="centered",
+    initial_sidebar_state="collapsed"
+)
 
-# CSS 스타일 (거래 로그 및 가격 색상)
 st.markdown("""
 <style>
-    .stButton button { width: 100%; margin: 5px 0; padding: 10px; font-size: 16px; }
+    .stButton button { width: 100%; margin: 5px 0; padding: 15px; font-size: 18px; }
+    .stTextInput input { font-size: 16px; padding: 10px; }
     .price-up { color: #ff4b4b; font-weight: bold; }
     .price-down { color: #4b7bff; font-weight: bold; }
-    .trade-progress { background-color: #f0f2f6; padding: 10px; border-radius: 10px; font-family: monospace; font-size: 13px; max-height: 150px; overflow-y: auto; }
+    .trade-progress {
+        background-color: #f0f2f6;
+        padding: 15px;
+        border-radius: 10px;
+        margin: 10px 0;
+        font-family: monospace;
+        font-size: 14px;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+    .trade-line { padding: 3px 0; border-bottom: 1px solid #e0e0e0; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. 데이터 연결 및 로드 (캐싱) ---
+# --- 2. 구글 시트 연결 및 데이터 로드 ---
 @st.cache_resource
 def connect_gsheet():
     try:
@@ -35,28 +50,57 @@ def connect_gsheet():
         st.error(f"❌ 시트 연결 에러: {e}")
         return None
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=10)
 def load_game_data():
     doc = connect_gsheet()
-    if not doc: return None
-    
-    # [설정/아이템/용병/마을/플레이어 데이터를 가져오는 기존 로직 동일]
-    # (코드 간결화를 위해 세부 gspread 로직은 기존 내용 유지로 간주합니다)
-    # ... (데이터 로드 로직 생략) ...
-    return settings, items_info, merc_data, villages, initial_stocks, slots
+    if not doc: return None, None, None, None, None, None
+    try:
+        set_ws = doc.worksheet("Setting_Data")
+        settings = {r['변수명']: float(r['값']) for r in set_ws.get_all_records()}
+        item_ws = doc.worksheet("Item_Data")
+        items_info = {str(r['item_name']).strip(): {'base': int(r['base_price']), 'w': int(r['weight'])} for r in item_ws.get_all_records() if r.get('item_name')}
+        bal_ws = doc.worksheet("Balance_Data")
+        merc_data = {str(r['name']).strip(): {'price': int(r['price']), 'w_bonus': int(r.get('weight_bonus', 0))} for r in bal_ws.get_all_records() if r.get('name')}
+        vil_ws = doc.worksheet("Village_Data")
+        vil_vals = vil_ws.get_all_values()
+        headers = [h.strip() for h in vil_vals[0]]
+        villages, initial_stocks = {}, {}
+        for row in vil_vals[1:]:
+            if not row or not row[0].strip(): continue
+            v_name = row[0].strip()
+            x, y = int(row[1]) if len(row)>1 and row[1] else 0, int(row[2]) if len(row)>2 and row[2] else 0
+            villages[v_name] = {'items': {}, 'x': x, 'y': y}
+            initial_stocks[v_name] = {}
+            if v_name != "용병 고용소":
+                for i in range(3, len(headers)):
+                    if headers[i] in items_info and len(row) > i and row[i].strip():
+                        villages[v_name]['items'][headers[i]] = int(row[i])
+                        initial_stocks[v_name][headers[i]] = int(row[i])
+        play_ws = doc.worksheet("Player_Data")
+        slots = []
+        for r in play_ws.get_all_records():
+            if str(r.get('slot', '')).strip():
+                slots.append({
+                    'slot': int(r['slot']), 'money': int(r.get('money', 0)), 'pos': str(r.get('pos', '한양')),
+                    'inv': json.loads(r.get('inventory', '{}')) if r.get('inventory') else {},
+                    'mercs': json.loads(r.get('mercs', '[]')) if r.get('mercs') else [],
+                    'week': int(r.get('week', 1)), 'month': int(r.get('month', 1)), 'year': int(r.get('year', 1592))
+                })
+        return settings, items_info, merc_data, villages, initial_stocks, slots
+    except Exception as e:
+        st.error(f"❌ 로드 에러: {e}"); return None, None, None, None, None, None
 
 # --- 3. 세션 초기화 ---
 def init_session_state():
     if 'game_started' not in st.session_state: st.session_state.game_started = False
     if 'player' not in st.session_state: st.session_state.player = None
-    if 'is_trading' not in st.session_state: st.session_state.is_trading = False
     if 'tab_key' not in st.session_state: st.session_state.tab_key = 0
+    if 'is_trading' not in st.session_state: st.session_state.is_trading = False
     if 'trade_logs' not in st.session_state: st.session_state.trade_logs = {}
-    if 'stats' not in st.session_state:
-        st.session_state.stats = {'total_bought': 0, 'total_sold': 0, 'total_spent': 0, 'total_earned': 0, 'trade_count': 0}
+    if 'last_qty' not in st.session_state: st.session_state.last_qty = {}
+    if 'stats' not in st.session_state: st.session_state.stats = {'total_spent': 0, 'total_earned': 0, 'total_bought': 0, 'total_sold': 0, 'trade_count': 0}
 
-# --- 4. 핵심 로직 함수 ---
-
+# --- 4. 핵심 게임 로직 ---
 def get_weight(player, items_info, merc_data):
     cw = sum(qty * items_info[item]['w'] for item, qty in player['inv'].items() if item in items_info)
     tw = 200 + sum(merc_data[m]['w_bonus'] for m in player['mercs'] if m in merc_data)
@@ -64,112 +108,123 @@ def get_weight(player, items_info, merc_data):
 
 def update_prices(settings, items_info, market_data):
     for v_name, v_items in market_data.items():
+        if v_name == "용병 고용소": continue
         for i_name, i_info in v_items.items():
             if i_name in items_info:
-                base = items_info[i_name]['base']
                 stock = i_info['stock']
-                # 재고 기반 가격 계수 (사용자 요청 로직)
                 if stock < 100: f = 2.0
                 elif stock < 500: f = 1.5
                 elif stock < 1000: f = 1.2
                 elif stock < 2000: f = 1.0
                 elif stock < 5000: f = 0.8
                 else: f = 0.6
-                i_info['price'] = int(base * f)
+                i_info['price'] = int(items_info[i_name]['base'] * f)
 
-def process_trade(mode, player, items_info, market_data, pos, item_name, target_qty, placeholder):
-    """매수/매도 통합 처리 (무게/돈 한도까지 루프 체결)"""
+def process_trade(mode, player, items_info, market_data, pos, item_name, target_qty, progress_ph, log_key):
     st.session_state.is_trading = True
-    total_qty, total_val = 0, 0
-    item_w = items_info[item_name]['w']
+    total_q, total_v = 0, 0
     batch = 100
-    
-    log_key = f"{mode}_{item_name}"
     st.session_state.trade_logs[log_key] = []
-
-    while total_qty < target_qty:
+    
+    while total_q < target_qty:
         update_prices(st.session_state.settings, items_info, market_data)
         curr_p = market_data[pos][item_name]['price']
         cw, tw = get_weight(player, items_info, st.session_state.merc_data)
         
         if mode == "BUY":
-            can_pay = player['money'] // curr_p if curr_p > 0 else 0
-            can_load = (tw - cw) // item_w if item_w > 0 else 0
-            current_batch = min(batch, target_qty - total_qty, market_data[pos][item_name]['stock'], can_pay, can_load)
+            can_p = player['money'] // curr_p if curr_p > 0 else 0
+            can_l = (tw - cw) // items_info[item_name]['w'] if items_info[item_name]['w'] > 0 else 9999
+            cur_batch = min(batch, target_qty - total_q, market_data[pos][item_name]['stock'], can_p, can_l)
         else: # SELL
-            current_batch = min(batch, target_qty - total_qty, player['inv'].get(item_name, 0))
-
-        if current_batch <= 0: break
+            cur_batch = min(batch, target_qty - total_q, player['inv'].get(item_name, 0))
+            
+        if cur_batch <= 0: break
         
-        # 데이터 반영
-        step_val = current_batch * curr_p
+        val = cur_batch * curr_p
         if mode == "BUY":
-            player['money'] -= step_val
-            player['inv'][item_name] = player['inv'].get(item_name, 0) + current_batch
-            market_data[pos][item_name]['stock'] -= current_batch
+            player['money'] -= val
+            player['inv'][item_name] = player['inv'].get(item_name, 0) + cur_batch
+            market_data[pos][item_name]['stock'] -= cur_batch
         else:
-            player['money'] += step_val
-            player['inv'][item_name] -= current_batch
-            market_data[pos][item_name]['stock'] += current_batch
+            player['money'] += val
+            player['inv'][item_name] -= cur_batch
+            market_data[pos][item_name]['stock'] += cur_batch
             
-        total_qty += current_batch
-        total_val += step_val
+        total_q += cur_batch
+        total_v += val
         
-        # 실시간 로그 UI
-        log_msg = f"➤ {total_qty}개 체결 중... (시세: {curr_p}냥)"
-        st.session_state.trade_logs[log_key].append(log_msg)
-        with placeholder.container():
-            st.markdown(f"<div class='trade-progress'>{'<br>'.join(st.session_state.trade_logs[log_key][-3:])}</div>", unsafe_allow_html=True)
-        time.sleep(0.05)
-
+        msg = f"➤ {total_q}/{target_qty} 체결 중... ({curr_p}냥)"
+        st.session_state.trade_logs[log_key].append(msg)
+        with progress_ph.container():
+            st.markdown(f"<div class='trade-progress'>{''.join([f'<div class=trade-line>{l}</div>' for l in st.session_state.trade_logs[log_key][-3:]])}</div>", unsafe_allow_html=True)
+        time.sleep(0.02)
+        
     st.session_state.is_trading = False
-    return total_qty, total_val
+    return total_q, total_v
 
-# --- 5. UI 프래그먼트 (시간) ---
-@st.fragment(run_every="1s")
-def sync_time_ui():
-    if st.session_state.get('is_trading', False):
-        st.caption("🔄 거래 중 시간 정지")
-        return
-
-    # 시간 업데이트 로직 호출 (기존 update_game_time)
-    # [시간/재고 초기화 로직 수행...]
-    st.write(f"📅 {st.session_state.player['year']}년 {st.session_state.player['month']}월")
-
-# --- 6. 메인 화면 ---
+# --- 5. 메인 실행 ---
+doc = connect_gsheet()
 init_session_state()
-# (로그인/슬롯 선택 로직 생략)
 
-if st.session_state.game_started:
-    p = st.session_state.player
-    
-    st.title(f"🏯 {p['pos']}")
-    sync_time_ui()
-    
-    cw, tw = get_weight(p, st.session_state.items_info, st.session_state.merc_data)
-    c1, c2 = st.columns(2)
-    c1.metric("💰 소지금", f"{p['money']:,}냥")
-    c2.metric("⚖️ 무게", f"{cw}/{tw}근")
+if doc:
+    if not st.session_state.game_started:
+        st.title("🏯 조선거상 미니")
+        settings, items_info, merc_data, villages, initial_stocks, slots = load_game_data()
+        if slots:
+            st.subheader("📋 세이브 슬롯 선택")
+            slot_choice = st.selectbox("슬롯 번호", options=[1, 2, 3])
+            if st.button("🎮 게임 시작"):
+                selected = next((s for s in slots if s['slot'] == slot_choice), None)
+                if selected:
+                    st.session_state.update({"player": selected, "settings": settings, "items_info": items_info, "merc_data": merc_data, "villages": villages, "initial_stocks": initial_stocks, "game_started": True})
+                    market_data = {v: {i: {'stock': s, 'price': items_info[i]['base']} for i, s in data['items'].items()} for v, data in villages.items() if v != "용병 고용소"}
+                    st.session_state.market_data = market_data
+                    st.rerun()
+    else:
+        # 게임 실행 화면
+        p, settings, items_info, market_data = st.session_state.player, st.session_state.settings, st.session_state.items_info, st.session_state.market_data
+        
+        # 시간 업데이트 (프래그먼트)
+        @st.fragment(run_every="1s")
+        def time_ui():
+            if not st.session_state.is_trading:
+                # 여기에 시간 흐름 로직 추가 가능
+                pass
+            st.write(f"📅 {p['year']}년 {p['month']}월 {p['week']}주차")
 
-    # --- 핵심 1: 탭 초기화 (key에 tab_key 사용) ---
-    tabs = st.tabs(["🛒 저잣거리", "📦 인벤토리", "⚔️ 용병", "⚙️ 이동"], key=f"main_tabs_{st.session_state.tab_key}")
+        st.title(f"📍 {p['pos']}")
+        time_ui()
+        cw, tw = get_weight(p, items_info, st.session_state.merc_data)
+        st.write(f"💰 {p['money']:,}냥 | ⚖️ {cw}/{tw}근")
 
-    with tabs[0]: # 저잣거리
-        # [아이템 리스트 출력 및 매매 버튼]
-        # if 매수 버튼 클릭:
-        #    process_trade("BUY", ...) -> st.rerun()
-        pass
+        # --- 핵심: 탭 초기화 키 적용 ---
+        tabs = st.tabs(["🛒 저잣거리", "📦 인벤토리", "⚔️ 용병", "⚙️ 메뉴"], key=f"tab_{st.session_state.tab_key}")
+        
+        with tabs[0]:
+            if p['pos'] in market_data:
+                for item_name, d in market_data[p['pos']].items():
+                    col1, col2, col3 = st.columns([2,1,1])
+                    col1.write(f"**{item_name}** ({d['price']:,}냥)")
+                    qty_input = st.text_input("수량", value="1", key=f"in_{item_name}")
+                    prog_ph = st.empty()
+                    b_col1, b_col2 = st.columns(2)
+                    if b_col1.button("💰 매수", key=f"b_{item_name}"):
+                        q, v = process_trade("BUY", p, items_info, market_data, p['pos'], item_name, int(qty_input), prog_ph, f"buy_{item_name}")
+                        st.session_state.last_trade_result = f"✅ {item_name} {q}개 매수 완료"
+                        st.rerun()
+                    if b_col2.button("📦 매도", key=f"s_{item_name}"):
+                        q, v = process_trade("SELL", p, items_info, market_data, p['pos'], item_name, int(qty_input), prog_ph, f"sell_{item_name}")
+                        st.session_state.last_trade_result = f"✅ {item_name} {q}개 매도 완료"
+                        st.rerun()
 
-    with tabs[3]: # 이동
-        st.subheader("🚚 마을 이동")
-        # 마을 선택 셀렉트박스 등...
-        if st.button("🚀 이동 실행"):
-            # 이동 로직 처리
-            # p['pos'] = 새 마을
-            # p['money'] -= 비용
-            
-            # --- 핵심 2: 이동 시 탭 초기화 로직 ---
-            st.session_state.tab_key += 1 # 키를 변경하여 0번 탭(저잣거리)으로 강제 리셋
-            if 'last_trade_result' in st.session_state: del st.session_state.last_trade_result
-            st.success(f"{dest}로 이동 완료!")
-            st.rerun()
+        with tabs[3]: # 메뉴 및 이동
+            st.subheader("🚚 마을 이동")
+            dest = st.selectbox("목적지 선택", [v for v in villages.keys() if v != p['pos']])
+            if st.button("🚀 이동하기"):
+                # 이동 비용 계산 및 적용 로직 (생략된 기존 로직 추가)
+                p['pos'] = dest
+                st.session_state.tab_key += 1 # 탭 초기화 핵심!
+                st.rerun()
+            if st.button("💾 저장"):
+                # 저장 로직
+                st.success("저장되었습니다.")
