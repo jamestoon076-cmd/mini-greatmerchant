@@ -831,23 +831,29 @@ if doc:
                                     if qty_int > 0:
                                         log_key = f"{player['pos']}_{item_name}_{time.time()}"
                                         
+                                        # 1. 100개씩 연속 체결하는 함수 호출
                                         sold, earned = process_sell(
                                             player, items_info, market_data,
                                             player['pos'], item_name, qty_int, progress_ph, log_key
                                         )
                                         
                                         if sold > 0:
+                                            # 통계 업데이트 (기존 코드 유지)
                                             st.session_state.stats['total_sold'] += sold
                                             st.session_state.stats['total_earned'] += earned
                                             st.session_state.stats['trade_count'] += 1
                                             
+                                            # ⭐ [중요] 매수와 똑같은 변수명을 사용하여 결과를 저장합니다.
                                             avg_price = earned // sold
-                                            st.session_state.last_trade_result = f"✅ {item_name} 총 {sold}개 매도 완료! (총 {earned:,}냥 | 평균가: {avg_price}냥)"
+                                            st.session_state.last_trade_result = f"✅ {item_name} 총 {sold}개 매도 완료! (수익: {earned:,}냥 | 평균가: {avg_price}냥)"
                                             
+                                            # 입력값 초기화
                                             st.session_state.last_qty[f"{player['pos']}_{item_name}"] = "1"
-                                            st.rerun()
+                                            
+                                            # ⭐ [중요] 화면을 새로고침해야 상단 UI에 결과가 뜹니다.
+                                            st.rerun() 
                                         else:
-                                            st.error("❌ 판매할 아이템이 없습니다.")
+                                            st.error("❌ 판매할 수 있는 아이템이 없습니다.")
                                     else:
                                         st.error("❌ 0보다 큰 수량을 입력하세요")
                                 except ValueError:
@@ -1045,6 +1051,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
