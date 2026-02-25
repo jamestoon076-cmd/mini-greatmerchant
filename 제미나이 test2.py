@@ -384,66 +384,66 @@ def calculate_max_purchase(player, items_info, market_data, pos, item_name, targ
     return min(max_by_money, max_by_weight, max_by_stock)
 
 def process_buy(player, items_info, market_data, pos, item_name, qty, progress_placeholder, log_key):
-    # ⭐ [추가] 매매 시작 상태 설정 (프래그먼트의 시간 업데이트 간섭 방지)
     st.session_state.is_trading = True
-    
     total_bought = 0
     total_spent = 0
-    batch_size = 100 # 연속 체결 단위
+    batch_size = 100 
     
     st.session_state.trade_logs[log_key] = []
     
-    # 9999개를 입력해도 이 while문이 돈과 무게가 허용하는 한 끝까지 돕니다.
+    # 아이템 개당 무게 정보 (에러 방지용 기본값 1)
+    item_w = items_info[item_name].get('w', 1)
+    
     while total_bought < qty:
-        # 1. 매 루프 시작 시 가격과 내 상태를 다시 계산 (실시간 반영)
+        # 1. 시세 업데이트 반영
         update_prices(st.session_state.settings, items_info, market_data, st.session_state.initial_stocks)
         target = market_data[pos][item_name]
+        current_price = target['price']
+        
+        # 2. 현재 내 상태 정밀 체크
         cw, tw = get_weight(player, items_info, st.session_state.merc_data)
+        remaining_money = player['money']
+        remaining_weight = tw - cw
         
-        # 2. 현재 살 수 있는 최대치 계산 (돈, 무게, 재고 고려)
-        can_pay = player['money'] // target['price'] if target['price'] > 0 else 0
-        item_w = items_info[item_name]['w']
-        can_load = (tw - cw) // item_w if item_w > 0 else 999999
+        # 3. 현재 시세 기준으로 살 수 있는 최대치 재계산
+        can_pay = remaining_money // current_price if current_price > 0 else 0
+        can_load = int(remaining_weight // item_w) if item_w > 0 else 999999
         
-        # 3. 이번 턴 체결량 (남은 주문량, 100개, 재고, 살돈, 실을무게 중 최소값)
+        # 4. 이번 배치 체결량 결정 (가장 엄격한 제한 기준)
+        # 100개씩 끊되, 돈/무게/재고 중 하나라도 걸리면 그 즉시 남은 최대치를 삽니다.
         current_batch = min(batch_size, qty - total_bought, target['stock'], can_pay, can_load)
         
-        # 더 이상 살 수 있는 조건이 안 되면 루프 종료
+        # 만약 100개가 안 되어도 1개라도 살 수 있다면 끝까지 진행
         if current_batch <= 0:
             break
             
-        # 4. 실제 데이터 차감 및 반영
-        cost = current_batch * target['price']
+        # 5. 데이터 즉시 반영
+        cost = current_batch * current_price
         player['money'] -= cost
         total_spent += cost
         player['inv'][item_name] = player['inv'].get(item_name, 0) + current_batch
         target['stock'] -= current_batch
         total_bought += current_batch
         
-        # 5. 실시간 로그 기록 및 출력
-        log_msg = f"➤ {total_bought}/{qty} 구매 중... (체결가: {target['price']}냥)"
+        # 로그 출력
+        log_msg = f"➤ {total_bought}/{qty} 체결 중... (현재가: {current_price}냥 | 남은무게: {remaining_weight - (current_batch * item_w)}근)"
         st.session_state.trade_logs[log_key].append(log_msg)
         
         with progress_placeholder.container():
-            # 마지막 5줄만 보여주어 성능 최적화
             for log in st.session_state.trade_logs[log_key][-5:]:
                 st.markdown(f"<div class='trade-line'>{log}</div>", unsafe_allow_html=True)
         
-        # 시각적인 체결 효과를 위해 아주 짧게 대기
-        time.sleep(0.05)
+        time.sleep(0.02) # 처리 속도를 위해 대기 시간 단축
 
-    # ⭐ [추가] 최종 결과 메시지를 세션에 저장 (상단 success 알림용)
     if total_bought > 0:
         avg_p = total_spent // total_bought
-        st.session_state.last_trade_result = f"✅ {item_name} 총 {total_bought}개 매수 완료! (총 {total_spent:,}냥 | 평균가: {avg_p}냥)"
+        st.session_state.last_trade_result = f"✅ {item_name} {total_bought}개 매수 완료! (총 {total_spent:,}냥 | 평균가: {avg_p}냥)"
     
-    # ⭐ [추가] 매매 종료 상태 해제
     st.session_state.is_trading = False
-    
     return total_bought, total_spent
     
 def process_sell(player, items_info, market_data, pos, item_name, qty, progress_placeholder, log_key):
-    # ⭐ [추가] 매매 시작 상태 설정 (시간 업데이트와 충돌 방지)
+    # ⭐ 매매 시작 상태 설정 (시간 업데이트와 충돌 방지)
     st.session_state.is_trading = True
     
     total_sold = 0
@@ -453,29 +453,33 @@ def process_sell(player, items_info, market_data, pos, item_name, qty, progress_
     st.session_state.trade_logs[log_key] = []
     
     while total_sold < qty:
-        # 1. 매 루프마다 가격 업데이트 (재고 증가에 따른 가격 하락 반영)
+        # 1. 시세 업데이트 반영 (내가 팔수록 가격이 내려감)
         update_prices(st.session_state.settings, items_info, market_data, st.session_state.initial_stocks)
-        current_price = market_data[pos][item_name]['price']
+        target = market_data[pos][item_name]
+        current_price = target['price']
         
-        # 2. 현재 시점 판매 가능 수량 체크 (내 인벤토리 기준)
+        # 2. 내가 현재 실제로 들고 있는 수량 체크
         my_stock = player['inv'].get(item_name, 0)
         
-        # 이번 턴 체결량 (주문 잔량, 100개 단위, 실제 보유량 중 최소값)
+        # 3. 이번 배치 체결량 결정 (주문 잔량, 100개 단위, 내 실제 보유량 중 최소값)
         current_batch = min(batch_size, qty - total_sold, my_stock)
         
-        # 더 이상 팔 수 있는 수량이 없으면 종료
+        # 더 이상 팔 수 있는 수량이 없으면 즉시 종료
         if current_batch <= 0:
             break
             
-        # 3. 데이터 반영
-        player['money'] += current_batch * current_price
-        player['inv'][item_name] -= current_batch
-        market_data[pos][item_name]['stock'] += current_batch
-        total_sold += current_batch
-        total_earned += current_batch * current_price
+        # 4. 데이터 반영
+        income = current_batch * current_price
+        player['money'] += income
+        total_earned += income
         
-        # 4. 실시간 로그 기록 및 출력
-        log_msg = f"➤ {total_sold}/{qty} 판매 중... (체결가: {current_price}냥)"
+        # 인벤토리에서 제거 및 마을 재고 증가
+        player['inv'][item_name] -= current_batch
+        target['stock'] += current_batch
+        total_sold += current_batch
+        
+        # 5. 실시간 로그 기록 및 출력
+        log_msg = f"➤ {total_sold}/{qty} 판매 중... (체결가: {current_price}냥 | 남은수량: {player['inv'][item_name]}개)"
         st.session_state.trade_logs[log_key].append(log_msg)
         
         with progress_placeholder.container():
@@ -483,15 +487,15 @@ def process_sell(player, items_info, market_data, pos, item_name, qty, progress_
             for log in st.session_state.trade_logs[log_key][-5:]:
                 st.markdown(f"<div class='trade-line'>{log}</div>", unsafe_allow_html=True)
         
-        # 체결 속도 조절
-        time.sleep(0.05)
+        # 체결 속도 (매수와 동일하게 0.02~0.05초 권장)
+        time.sleep(0.02)
 
-    # ⭐ [추가] 최종 결과 메시지를 세션에 저장 (상단 알림용)
+    # ⭐ 최종 결과 메시지를 세션에 저장 (상단 알림용)
     if total_sold > 0:
         avg_p = total_earned // total_sold
-        st.session_state.last_trade_result = f"✅ {item_name} 총 {total_sold}개 매도 완료! (총 {total_earned:,}냥 | 평균가: {avg_p}냥)"
+        st.session_state.last_trade_result = f"✅ {item_name} 총 {total_sold}개 매도 완료! (수익: {total_earned:,}냥 | 평균가: {avg_p}냥)"
     
-    # ⭐ [추가] 매매 종료 상태 해제
+    # ⭐ 매매 종료 상태 해제
     st.session_state.is_trading = False
     
     return total_sold, total_earned
@@ -1083,6 +1087,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
