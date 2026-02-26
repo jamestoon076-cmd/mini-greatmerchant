@@ -74,7 +74,7 @@ def connect_gsheet():
         return None
 
 # --- 3. 데이터 로드 함수 ---
-@st.cache_data(ttl=10)
+@st.cache_data(ttl=60)
 def load_game_data():
     doc = connect_gsheet()
     if not doc:
@@ -693,10 +693,15 @@ if doc:
 
         sync_time_ui()
 
-       # 📑 7. 탭 메뉴 구성
-        # key 파라미터를 완전히 제거
+       # --- 7. 탭 메뉴 구성 ---
+        # 세션에 tab_key가 없으면 0으로 초기화 (에러 방지)
+        if 'tab_key' not in st.session_state:
+            st.session_state.tab_key = 0
+
+        # key에 tab_key를 연동하여 이동 시 리셋 가능하게 설정
         tab1, tab2, tab3, tab4, tab5 = st.tabs(
-            ["🛒 저잣거리", "📦 인벤토리", "⚔️ 용병", "📊 통계", "⚙️ 이동"]
+            ["🛒 저잣거리", "📦 인벤토리", "⚔️ 용병", "📊 통계", "⚙️ 이동"],
+            key=f"tabs_{st.session_state.tab_key}"
         )
             
         
@@ -1050,6 +1055,7 @@ if doc:
                 st.session_state.game_started = False
                 st.cache_data.clear()
                 st.rerun()
+
 
 
 
